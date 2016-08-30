@@ -1,0 +1,484 @@
+;GV10 Jump in version to implementing QPSK
+
+
+
+
+
+CONSTANT	Example,				2F
+
+
+; Registers
+NAMEREG		sF, 		  ;Aargh sB is used by the Cordic!! - but not used now
+
+; registers sA-sD are used for longish term storage...!
+; sA used for cordic calcs and FIR work for relative pos of roving ptr
+
+; Scratch pad
+; registers 0-8 used for cordic table:
+; reg 0=45degrees
+; ..
+; reg 7=0.44761degrees
+
+; Input port
+CONSTANT	AudioUSB,		0'd
+CONSTANT	AudioMSB,		1'd
+CONSTANT	AudioLSB,		2'd
+
+
+
+
+; Output ports
+
+CONSTANT	MSBAudio,			0'd
+
+
+
+
+; Scratchpad registers
+; 0-8 used for Cordic Table!
+
+
+
+
+
+cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actually a bit less!
+                    STORE     s0, 00
+                    LOAD      s0, 151'd             ; phase for 26.565 degrees
+                    STORE     s0, 01
+                    LOAD      s0, 80'd              ; phase for 14.036 degrees
+                    STORE     s0, 02
+                    LOAD      s0, 41'd              ; phase for 7.125 degrees
+                    STORE     s0, 03
+                    LOAD      s0, 20'd              ; phase for 3.576 degrees
+                    STORE     s0, 04
+                    LOAD      s0, 10'd              ; phase for 1.79 degrees
+                    STORE     s0, 05
+                    LOAD      s0, 5'd               ; phase for 0.895 degrees
+                    STORE     s0, 06
+                    LOAD      s0, 3'd               ; phase for 0.448 degrees
+                    STORE     s0, 07
+                    LOAD      s0, 1'd               ; phase for 0.224 degrees
+                    STORE     s0, 08
+                    
+                    LOAD	  s0,16'd
+                    STORE	  s0,AGCvalueTX		
+                    LOAD	  s0,63'd
+                    STORE	  s0,AGCvalueRX		;set to low value for RX
+
+
+
+
+; Routine to look at lowest bit of Strobe to detect rising edge.
+AwaitAudioVal:	  	INPUT     s0, Strobe
+                    AND       s0, 01               ; look only at lowest bit
+                    COMPARE   s0, 01
+                    JUMP      Z, AwaitAudioVal    ; if 1 wait...
+AwaitRise:          INPUT     s0, Strobe
+                    AND       s0, 01               ; look only at lowest bit
+                    COMPARE   s0, 00
+                    JUMP      Z, AwaitRise        ; if 0 still, wait a bit more...
+
+
+
+ 					INPUT     s0, AudioLSB	   ; Now have the new value (different addresses from before!)
+ 					INPUT 	  s1,AudioMSB
+; 					INPUT 	  s2,AudioUSB	   ;not when using external MUX for AGC
+ 					
+ 					
+ 
+
+                JUMP      AwaitAudioVal
+
+; -------------This is end of main loop--------------------------------
+
+;Routine to take 16 bit value in s3,s2 and shift right by 5 to divide by 32 and leave value in s3,s2
+;Assumes this is an unsigned numbers - normally used on a magnitude.
+Divide32:  CALL		Divide4
+		   CALL		Divide4
+		   SR0		s3
+		   SRA		s2
+
+		   RETURN
+		
+Divide4:   SR0		s3
+		   SRA		s2
+		   SR0		s3
+		   SRA		s2
+		   RETURN		
+
+
+
+SpeakerOn:		 LOAD 	s1,01
+				 OUTPUT s1,EnableSpeaker
+		 		 RETURN
+		 		 
+SpeakerOff:		RETURN	 				 ;Disable for the moment
+				LOAD 	s1,00
+				OUTPUT	s1,EnableSpeaker
+		 		 		
+		 		RETURN
+		 		 
+;Routines to average I and Q demodulated tone signals
+;Check the amplitude of the demodulated and averaged signals compared to long average - 
+; CORDIC  Takes I in s0(LSB)and s1(MSB) and Q in s2,s3 and returns the amplitude in s0,s1 and the phase in s4,s5. s8 is the loop counter
+; Useable range is for I and Q up to about +/-$3000
+
+cordic:	  		   	LOAD      s4, 00
+                    LOAD      s5, 00
+
+                    COMPARE   s1, 128'd
+                    CALL      NC, rotate90        ; if I negative then need to bring back into RH 2 quadrants.
+; now enter loop
+
+                    LOAD      s8, 00              ; counter of times to iterate.
+cordicloop:         LOAD      s7, s1              ; temporary store for I
+                    LOAD      s6, s0              ; temp store
+
+                    COMPARE   s3, 128'd           ; is Q negative?
+                    JUMP      NC, posrotate       ; if negative rotate positive
+negrotate:          LOAD      sA, s2
+                    LOAD      sB, s3              ; put Q into working registers
+                    CALL      shift               ; shift Q by the amount in s8
+                    ADD       s0, sA              ; add shifted Q to I
+                    ADDCY     s1, sB
+                    LOAD      sA, s6              ; prepare working registers (sA,sB) with original value of I
+                    LOAD      sB, s7
+                    CALL      shift
+                    SUB       s2, sA
+                    SUBCY     s3, sB
+                    CALL      GetPhaseIncrement
+                    SUB       s4, sA
+                    SUBCY     s5, sB
+                    JUMP      testcordicend
+posrotate:          LOAD      sA, s2
+                    LOAD      sB, s3              ; put Q into working registers
+                    CALL      shift               ; shift Q by the amount in s8
+                    SUB       s0, sA              ; add shifted Q to I
+                    SUBCY     s1, sB
+                    LOAD      sA, s6              ; prepare working registers with original value of I
+                    LOAD      sB, s7
+                    CALL      shift
+                    ADD       s2, sA
+                    ADDCY     s3, sB
+                    CALL      GetPhaseIncrement
+                    ADD       s4, sA
+                    ADDCY     s5, sB
+testcordicend:      ADD       s8, 01
+                    COMPARE   s8, m_plus_1 		;m + 1
+                    JUMP      C, cordicloop
+                    RETURN       
+
+; routine to lookup from the cordic look up table (scratchpad), the phase increment - stored as 8 bits at the location pointed to be s8, returned as 16 bits in sA and sB
+; sB is MSB
+GetPhaseIncrement:  FETCH     sB, (s8)
+                    SR0       sB
+                    SRA       sA
+                    SR0       sB
+                    SRA       sA
+                    SR0       sB
+                    SRA       sA                  ; This multiplies the 8 bit stored value by 32 so that max scratchpad value 255->255*32 equivalent to 44.82degrees
+                    RETURN       
+
+shift:              LOAD      s9, s8
+shiftloop:          COMPARE   s9, 00
+                    RETURN    Z
+                    SUB       s9, 01
+                    SRX       sB
+                    SRA       sA
+                    JUMP      shiftloop
+
+
+
+rotate90:           LOAD      s7, s1              ; temporary store for I
+                    LOAD      s6, s0              ; temp store
+
+                    COMPARE   s3, 128'd           ; is Q negative?
+                    JUMP      NC, add90           ; if negative add 90
+sub90:              LOAD      s1, s3
+                    LOAD      s0, s2              ; I=Q
+                    LOAD      s2, 00
+                    LOAD      s3, 00
+
+                    SUB       s2, s6
+                    SUBCY     s3, s7              ; Q=-I
+                    SUB       s4, half_pi_LSB
+                    SUBCY     s5, half_pi_MSB
+                    RETURN       
+
+add90:              LOAD      s1, 00
+                    LOAD      s0, 00
+                    SUB       s0, s2
+                    SUBCY     s1, s3              ; I=-Q
+
+                    LOAD      s2, s6
+                    LOAD      s3, s7              ; Q=I
+                    LOAD      s4, half_pi_LSB
+                    LOAD      s5, half_pi_MSB
+                    RETURN       
+
+Transmitmode:       FETCH     s1, State
+                    OR        s1, 02
+                    STORE     s1, State           ; set bit 1
+                    
+                    FETCH      s1,AGCvalue
+                    STORE	  s1,AGCvalueRX
+                    FETCH	  s1,AGCvalueTX		  ;recovers last used value for AGCvalur in this mode
+                    STORE      s1,AGCvalue
+                    RETURN       
+
+;Streammode:			CALL Transmitmode
+;					FETCH     s1, State
+ ;                   OR        s1, 4
+  ;                  STORE     s1, State           ; set bit 2
+;					RET
+                    	
+;GetUartValues:		CALL      Get2Chars			  ;Changed name of this routine
+;					LOAD	  s1,$AA			  ;rough value
+;					LOAD	  s2,s5				  ;now put into top byte
+;					SRX		  s2
+;					SRA		  s1				  ;divide signal by 2
+;					SRX		  s2
+;					SRA		  s1				  ;divide signal by 2 again
+;					LOAD 	  s0,$AA				  ;set lowest bits to rough value
+;				    RET
+					
+
+
+GrabTXAGCvalue:     FETCH     s1,AGCvalue
+                    STORE	  s1,AGCvalueTX
+					RETURN
+
+
+Receivemode:        FETCH     s1, State
+                    AND       s1, 253'd 			; 255 - 2
+                    STORE     s1, State           ; reset bit 1
+                    FETCH     s1,AGCvalue
+                    STORE	  s1,AGCvalueTX
+                    FETCH	  s1,AGCvalueRX		  ;recovers last used value for AGCvalur in this mode
+                    STORE     s1,AGCvalue
+                    RETURN
+
+BlockDSPpico:       LOAD      s1, 240'd
+                    OUTPUT    s1, SSBAmp          ; Set signal amp to high
+                    LOAD 	  s1,00
+					OUTPUT	  s1,PhaseIncrement				;Make sure phase doesn't wander
+                    INPUT     s0, Command         ; Check if FIFO character present
+                    COMPARE   s0, 128'd           ; is there a character?
+                    JUMP      NC, BlockDSPpico	  ; no command received so carry on blocking
+					CALL      GetFifoChar		  ;is command so get charcter
+                    
+                    
+                    COMPARE   s0, 82'd            ; character R
+                    RETURN    Z	  				  ;escape when R received from User Pico
+
+					JUMP	 BlockDSPpico
+
+
+
+
+; Get fifo command and act on it.
+Respond2Fifo:
+;			 	   	FETCH  	  s0,State
+;					AND		  s0,04
+;					COMP	  s0,04	 	 		  ;is this stream mode
+;					RETURN Z					  ;if so then stick (no backing out!)
+
+			 	    CALL      GetFifoChar
+;					COMPARE	  s0,51'd		 		  ;character 3
+;					CALL	  Z,Streammode
+					COMPARE   s0, 50'd              ; character 2
+                    CALL      Z, GrabTXAGCvalue	  ;need to get this before userpico sends warble
+
+                    COMPARE   s0, 49'd              ; character 1
+                    CALL      Z, Transmitmode
+                    COMPARE   s0, 48'd              ; character 0
+                    CALL      Z, Receivemode
+                    COMPARE   s0, 71'd              ; character G (request for AGCvalue info from userpico)
+                    CALL      Z, SendGParamBack
+                    COMPARE   s0, 83'd              ; character S (request for AVEsignal info from userpico)
+                    CALL      Z, SendSParamBack
+
+                    COMPARE   s0, 66'd              ; character B (block)
+                    CALL      Z, BlockDSPpico
+                    
+                    
+
+                    RETURN       
+
+
+
+;This can be adjusted for de-bugging AGCvalue
+SendGParamBack:     FETCH     s5, AGCvalue
+                    CALL      Export2User
+                    RETURN       
+
+;This can be adjusted for de-bugging AVEsignal
+SendSParamBack:     LOAD     s5, AveSignalUSB
+                    CALL      Export2User
+                    RETURN
+
+; Routine to recover a character from the FIFO in s0
+GetFifoChar:        LOAD      s0, AckFIFO
+                    OUTPUT    s0, Controlbits
+                    LOAD      s0, AckFIFO         ; Wait
+
+                    INPUT     s0, Command         ; now get my character
+                    AND       s0, 7F             ; mask off top bit
+                    RETURN       
+
+
+; routine to look at command input and recover 2 characters and return the byte they represent in s5.
+Get2Chars:          INPUT     s6, Command
+                    COMPARE   s6, 128'd           ; if greater than 128, then no character
+                    JUMP      NC, Get2Chars
+                    CALL      GetFifoChar
+                    LOAD      s6, s0
+
+
+Get2ndChar:         INPUT     s7, Command
+                    COMPARE   s7, 128'd           ; if greater than 128, then no character
+                    JUMP      NC, Get2ndChar
+                    CALL      GetFifoChar
+                    LOAD      s7, s0
+
+                    JUMP      Chars2Byte
+
+
+
+
+; Routine to take ascii codes in s6 and s7 and return a byte in s5 given by this character representation
+Chars2Byte:         LOAD      s8, s6
+                    CALL      Get4bits
+                    LOAD      s5, s8
+                    SL0       s5
+                    SL0       s5
+                    SL0       s5
+                    SL0       s5                  ; put these 4 bits to MSBs
+                    LOAD      s8, s7
+                    CALL      Get4bits
+                    ADD       s5, s8
+                    RETURN       
+
+; This routine takes an ascii code in s8 and returns a 4 bit value in s8
+Get4bits:           COMPARE   s8, 60'd           ; if character is 0-9 it is less than 60, if it is A-F then it is greater than 60
+                    JUMP      C, char0_9
+                    SUB       s8, 55'd            ; assumes hex codes A-F are in capitals!!, A (code 65) gives 10...
+                    AND       s8, 0F             ; make sure only return 4 bits
+                    RETURN       
+
+char0_9:            SUB       s8, 48'd
+                    AND       s8, 0F             ; make sure only return 4 bits
+                    RETURN      
+
+
+; takes data in s5 and returns two ascii codes in s6,s7 (s7 is character for lower 4 bits)
+Byte2Chars:         LOAD      s8, s5              ; assumes 8 bit data is in s5
+
+                    SR0       s5
+                    SR0       s5
+                    SR0       s5
+                    SR0       s5                  ; get first hex character
+                    CALL      GetChar
+                    LOAD      s6, s5              ; first ascii char
+                    LOAD      s5, s8
+                    AND       s5, 0F
+                    CALL      GetChar             ; send to LCD or UART
+                    LOAD      s7, s5              ; second ascii char
+                    RETURN       
+
+; routine to convert 4bit value in s5 to an ascii code, returned in s5
+GetChar:            SUB       s5, 10'd            ; Test if s5 greater than 9
+                    JUMP      C, is_0_9           ; Hex character is 0_9
+                    ADD       s5, 65'd            ; offset for Ascii code 'A'
+                    RETURN       
+is_0_9:             ADD       s5, 10'd            ; return to range 0-9
+                    ADD       s5, 48'd            ; offset to Ascii code for '0'
+                    RETURN       
+
+
+
+
+
+
+; Registers used s0, s1, s2, s3, s4 and s5.
+; 
+delay_1s:           LOAD      s5, 00               ; clear cycle counter
+                    LOAD      s4, 00
+wait_1s:            CALL      delay_1ms
+                    ADD       s4, 01               ; increment cycle counter
+                    ADDCY     s5, 00
+                    COMPARE   s4, count_1000_lsb  ; test for 1000ms
+                    JUMP      NZ, wait_1s
+                    COMPARE   s5, count_1000_msb
+                    JUMP      NZ, wait_1s
+                    RETURN       
+; 
+; Delays of approximately 200ms and 300ms used for LCD display scrolling
+; 
+; 
+; Registers used s0, s1, s2, s3 and s4.
+; 
+delay_300ms:        CALL      delay_100ms
+delay_200ms:        CALL      delay_100ms
+                    CALL      delay_100ms
+                    RETURN       
+; 
+; Delay of approximately 100ms used for switch debounce
+; 
+; Registers used s0, s1, s2, s3 and s4.
+; 
+delay_100ms:        LOAD      s4, 64             ; repeat 1ms delay 100 times
+wait_100ms:         CALL      delay_1ms
+                    SUB       s4, 01
+                    JUMP      NZ, wait_100ms
+                    RETURN       
+; 
+; Delay of approximately 1ms required by LCD display
+; 
+; Registers used s0, s1, s2 and s3.
+; 
+delay_1ms:          LOAD      s3, 00               ; clear cycle counter
+                    LOAD      s2, 00
+wait_1ms:           CALL      delay_1us
+                    ADD       s2, 01               ; increment cycle counter
+                    ADDCY     s3, 00
+                    COMPARE   s2, count_1000_lsb  ; test for 1000us
+                    JUMP      NZ, wait_1ms
+                    COMPARE   s3, count_1000_msb
+                    JUMP      NZ, wait_1ms
+                    RETURN       
+; 
+; Delay of approximately 50us required by LCD display
+; 
+; Registers used s0 and s1.
+; 
+delay_50us:         LOAD      s1, 50'd            ; repeat 1us delay 50 times
+wait_50us:          CALL      delay_1us
+                    SUB       s1, 01
+                    JUMP      NZ, wait_50us
+                    RETURN       
+
+; Delay of approximately 1us used to provide timing reference for
+; LCD operations. This must be adjusted to reflect the clock
+; applied to KCPSM3. The provided code is for a 50MHz clock rate.
+; 
+; The software delay loop is formed using register s0. This register
+; must be loaded with an integer value close to the result of....
+; 
+; value =  (clock_rate - 4)/4          Where 'clock_rate' is in MHz
+; 
+; So for a 50MHz clock the value is (50-4)/4 = 11.5 and 12 would be used.
+; For clock rates below 8MHz the value of 1 must be used and the I2C bus
+; operation will become lower than the 100KHz target intended.
+; 
+; Register used s0.
+; 
+
+delay_1us:          LOAD      s0, delay_1us_constant; delay value of 12 decimal for a 50MHz clock
+wait_1us:           SUB       s0, 01
+                    JUMP      NZ, wait_1us
+                    RETURN       
+; 
+; 
+
+

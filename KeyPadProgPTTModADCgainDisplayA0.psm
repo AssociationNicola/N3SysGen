@@ -1,4 +1,3 @@
-;Modified for 49.162MHz clock
 ;A0 is version to get start and stop tone levels for speaker switching.
 ;
 ;99 - add latch on button facility so don't need handset plugged in.
@@ -25,7 +24,7 @@ NAMEREG	sD, cursor_position	;     EQU       sD                  ; register to de
 
 
 
-CONSTANT    delay_1us_constant,       06                  ; Value (13)19 or 12? decimal suitable for 50MHz clock – about 6 for 33MHz?
+CONSTANT	delay_1us_constant,			12'd                  ; Value (13)19 or 12? decimal suitable for 50MHz clock – about 8 for 20MHz
 CONSTANT	count_1000_lsb,				E8                 	; hex lower 8-bits of 1000 count value
 CONSTANT	count_1000_msb,				03                  ; hex upper 8-bits of 1000 count value
 
@@ -33,12 +32,11 @@ CONSTANT	count_1000_msb,				03                  ; hex upper 8-bits of 1000 count
 
 ; Input port - port numbering changed June 11
 CONSTANT	Command,				0'd                   ; From main pico
-CONSTANT	PTT,			1'd					  ;This is PTT
+CONSTANT	TouchSignal,			1'd					  ;This is PTT
 CONSTANT	RAMdataInLSB,			2'd
 CONSTANT	RAMdataInMSB,			3'd
 CONSTANT	KP2userbufferFull,		4'd					  ;Bit 0 KP2User buffer full, Bit 1 Touch counter running
-CONSTANT	TouchSignal2,			5'd					  ;This is keypad Bit 0 On, Bit 1 Select, Bit 2 Down, Bit 3 Up
-;TouchSignal2=0E is On, 0D = Select, 0B = Down, 07= Up
+CONSTANT	TouchSignal2,			5'd					  ;This is keypad
 CONSTANT	ADCpeak,				6'd
 CONSTANT	DemodPeak,				7'd
 ;CONSTANT	SignalLevel,			8'd
@@ -72,11 +70,10 @@ CONSTANT	LatchOn,				9'd
 CONSTANT	RXFreqMSB,				10'd                  ; 7546 for 87.956kHz ie 86.956kHz carrier and allow range up to 154kHz 7555 Heyphone
 CONSTANT	RXFreqLSB,				11'd
 
-CONSTANT	TXFreqMSB,				12'd                  ; 3710  with 49.152MHz clock, with 49.162MHz - need 3709 for N2 and 3711 for Heyphone
+CONSTANT	TXFreqMSB,				12'd                  ; 3710  with 49MHz clock
 CONSTANT	TXFreqLSB,				13'd
 
 ;TX frequencies:
-;For 49.152MHz!
 ;Heyphone - 0e80
 ;N2 -       0e7e
 ;N3_31 -    052b
@@ -86,15 +83,6 @@ CONSTANT	TXFreqLSB,				13'd
 ;N2  -       $7546
 ;N3_31  -    $2aad
 
-;But for 49.162MHz:
-;Heyphone - 0e7F
-;N2 -       0e7d
-;N3_31 -    052a
-
-;RX frequencies:
-;Heyphone  - $754F
-;N2  -       $753E
-;N3_31  -    $2953
 
 
 
@@ -140,15 +128,12 @@ welcome_message:    CALL      LCD_home             ; left hand of display
                     LOAD      LCD_data, " "
                     CALL      LCD_character_write
                     
-initialise:			LOAD	  s0,00				 ;This is now used to drive LatchOn which latches the device on!!
+initialise:			LOAD	  s0,00				 ;This is now used to drive PMOD1 which latches the device on!!
 					OUTPUT    s0,LatchOn	 ;Latch On if 1
 					
 					
-;set values for Hey by default
-					INPUT	  s0,PTT 	;This is PTT but also has set default frequency bits
-		    	 		SR0	s0
-					AND	s0,03		
-;					LOAD   	s0,01		 ;use 1 for Hey, 2 for N2 freq, 3 for 37kHz
+;set values for Heyphone by default
+	 				LOAD   	s0,01		 ;use \Heyphone
 	 				STORE 	s0,Freq2Set
 					CALL	UpdateFreqRegisters
 
@@ -157,7 +142,7 @@ initialise:			LOAD	  s0,00				 ;This is now used to drive LatchOn which latches 
 					INPUT	 s5,TouchSignal2
 					AND 	s5,0F
 
-					COMPARE	  s5,0E			;is 'ON' pressed
+					COMPARE	  s5,07			;is 'ON' pressed
 					JUMP	  NZ,loop			;if not ON button, skip
 					LOAD	  s0,01				 ;This is now used to drive PMOD1 which latches the device on!!
 					OUTPUT	  s0,LatchOn	 ;Latch On
@@ -173,7 +158,7 @@ loop:				INPUT     s0, Command		  ;Check if FIFO character present
                     
                     INPUT	  s1,TouchSignal2
                     AND 	  s1,0F
-                    COMPARE	  s1,0F			;bits go to zero if pressed
+                    COMPARE	  s1,0F			;0 if pressed - logic on proto2 is inverted
                     CALL	  NZ,KeyPressed
 
 
@@ -196,16 +181,13 @@ loop:				INPUT     s0, Command		  ;Check if FIFO character present
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-                    INPUT	  s1,PTT 	;This is PTT
-		    AND		  s1,01		;Mask lowest bit
+                    INPUT	  s1,TouchSignal 	;This is PTT
                     COMPARE	  s1,00			;0 if pressed - logic on proto2 is inverted
                     JUMP	  Z,TouchDown
                     
 ;think touch is not pressed
 NotTouchDown:		CALL	  delay_100ms
-					INPUT	  s1,PTT
-			AND		  s1,01		;Mask lowest bit
-                    
+					INPUT	  s1,TouchSignal
                     COMPARE	  s1,00			;check if pressed logic on proto2 is inverted
                     JUMP	  Z,loop		;so is in fact pressed so escape
                     LOAD	  cursor_position,04	;position cursor just after 'Nicola 3'
@@ -218,9 +200,7 @@ NotTouchDown:		CALL	  delay_100ms
 
 ;believe touch to be pressed
 TouchDown:			CALL	  delay_100ms
-					INPUT	  s1,PTT
-			AND		  s1,01		;Mask lowest bit
-                    
+					INPUT	  s1,TouchSignal
                     COMPARE	  s1,00			;logic on proto2 is inverted
                     JUMP	  NZ,loop		;so is not in fact pressed - escape
 					LOAD	  cursor_position,04	;position cursor just after 'Nicola 3'
@@ -244,10 +224,9 @@ KeyPressed:			CALL	  delay_1s
                     CALL	LCD_position_cursor
                     LOAD 	sB," "			; character_space
                     LOAD 	sC," "			; character_space
-;TouchSignal2=0E is On, 0D = Select, 0B = Down, 07= Up
-					COMPARE s5,07
-					CALL 	Z,upFreq
 					COMPARE s5,0B
+					CALL 	Z,upFreq
+					COMPARE s5,0E
 					CALL 	Z,DownFreq ;These should reload LCD_data and sC with characters representing code of Freq, N3 etc
 					
 ;					LOAD	  LCD_data,sB
@@ -259,14 +238,14 @@ KeyPressed:			CALL	  delay_1s
 					COMPARE	 	s5,0D
 					CALL 		Z,UpdateFreqRegisters
 					
-					COMPARE		 s5,0E
+					COMPARE		 s5,07
 					CALL 		Z,TurnOff
 					
 ;and use DispAntennaInput for setting antenna input
 
-	 	 			COMPARE		s5,05		  ;Up+select
+	 	 			COMPARE		s5,09		  ;Up+select
 					CALL 		Z,SetLoop
-					COMPARE		s5,09	  	  ;Down+select
+					COMPARE		s5,0C	  	  ;Down+select
 					CALL 		Z,SetEarth
 					
 					RETURN
@@ -292,7 +271,7 @@ DownFreq:			FETCH s0,Freq2Set
 					
 					
 					
-CheckWhichFreq:				COMPARE  	s0,00
+CheckWhichFreq:		COMPARE  	s0,00
 					CALL  		Z,ClearFreq				;clear set display
 					COMPARE		s0,01
 					CALL  		Z,SetHeyphoneFreq				;set Hy freq and return
@@ -313,67 +292,50 @@ ClearFreq:			LOAD	  sB," "		; character_space
 					
 					RETURN
 
-
-;TX frequencies:
-;for 49.162MHz!:
-;Heyphone - 0e7F
-;N2 -       0e7d
-;N3_31 -    052a
-
-;RX frequencies:
-;Heyphone  - $754F
-;N2  -       $753E
-;N3_31  -    $2953
-
-
-
-; with 49.162MHzMHz!
-SetHeyphoneFreq:	                LOAD	  s1,0e
+SetHeyphoneFreq:	LOAD	  s1,0e
 					STORE	  s1,TX_F_MSB
-					LOAD	  s1,7F
+					LOAD	  s1,80
 					STORE	  s1,TX_F_LSB
 					LOAD	  s1,75
 					STORE	  s1,RX_F_MSB
-					LOAD	  s1,4F
+					LOAD	  s1,55
 					STORE	  s1,RX_F_LSB
 					LOAD	  sB,"h"		; character_h
 					LOAD	  sC,"y"		; character_y
 					
 					RETURN
 
-;For N3 5565 (15BD) TX and  45032 (AFE8) RX with 32.768MHz!
-SetN2Freq:			        LOAD	  s1,0e
+SetN2Freq:			LOAD	  s1,0e
 					STORE	  s1,TX_F_MSB
-					LOAD	  s1,7d
+					LOAD	  s1,7e
 					STORE	  s1,TX_F_LSB
 					LOAD	  s1,75
 					STORE	  s1,RX_F_MSB
-					LOAD	  s1,3E
+					LOAD	  s1,46
 					STORE	  s1,RX_F_LSB
 					LOAD	  sB,"n"		; character_n
 					LOAD	  sC,"2"		; character_2
 					
 					RETURN
 
-;For 31kH 1984 TX (07C0)    16384 for RX (4000 hex) with 32.768MHz!
-SetN3_31Freq:		                LOAD	  s1,05
+SetN3_31Freq:		LOAD	  s1,05
 					STORE	  s1,TX_F_MSB
-					LOAD	  s1,2a
+					LOAD	  s1,2b
 					STORE	  s1,TX_F_LSB
-					LOAD	  s1,29
+					LOAD	  s1,2a
 					STORE	  s1,RX_F_MSB
-					LOAD	  s1,53
+					LOAD	  s1,ad
 					STORE	  s1,RX_F_LSB
-					LOAD	  sB,"3"		; character_3
-					LOAD	  sC,"1"		; character_1
+					LOAD	  sB,"n"		; character_n
+					LOAD	  sC,"3"		; character_3
 					
 					RETURN
 
 
 
 					
-UpdateFreqRegisters:			LOAD	  cursor_position, C6	;position cursor
-                    			CALL	  LCD_position_cursor
+UpdateFreqRegisters:	 LOAD	  cursor_position, C6	;position cursor
+                    CALL	  LCD_position_cursor
 
 					
 					LOAD      LCD_data, "f"				; character_f		 ;
@@ -390,7 +352,7 @@ UpdateFreqRegisters:			LOAD	  cursor_position, C6	;position cursor
 					RETURN
 
 
-SetLoop:				LOAD	  s8,"l"		; character_l
+SetLoop:			LOAD	  s8,"l"		; character_l
 					LOAD	  s9,"o"		; character_o
 					LOAD	  sA,"o"		; character_o
 					
@@ -399,7 +361,7 @@ SetLoop:				LOAD	  s8,"l"		; character_l
 					
 					JUMP DispAntennaInput
 					
-SetEarth:				LOAD	  s8,"e"		; character_e
+SetEarth:			LOAD	  s8,"e"		; character_e
 					LOAD	  s9,"a"		; character_a
 					LOAD	  sA,"r"		; character_r
 					
@@ -428,20 +390,31 @@ DispAntennaInput: 	LOAD	  cursor_position,CB	;position cursor near end of second
 
 
 ;displays s5
-Displays5:				CALL	  Byte2Chars
-                    			LOAD      LCD_data, s6		 ;
+Displays5:			CALL	  Byte2Chars
+                    LOAD      LCD_data, s6		 ;
 					CALL      LCD_character_write		;then write to LCD
 					LOAD      LCD_data, s7		 ;
 					CALL      LCD_character_write		;then write to LCD
 					RETURN			
 
 
+;initialise scratchpad values for touch levels
+;GetTouchLevels:		  LOAD	  s0,00			  	;!!!!!!!!!!!!!! 1 for touch down, 0 for up - changed to up 23/6/11 only worry about touch down for the moment! (This is the touch nearest the middle of the lid)
+;					OUTPUT    s0,ChooseTouchKey	 ;Select which pad to read
+;					INPUT     s6,TouchSignal
+;					CALL	  delay_100ms
+;					INPUT	  s1,TouchSignal
+;					ADD		  s1,s6
+;					SRA		  s1   			;Devide by 2 taking ito account carry so average 2 values
+;					SUB		  s1,20			;set threshold at a lower value (assuming doesn't wrap around!!) -or add???????
+;					STORE	  s1,TouchDownLevel
+;					RETURN
 					
 
 
 
 ;Get fifo command and act on it. Echo ascii value to LCD
-Respond2Fifo:				;CALL	LCD_cursor_back
+Respond2Fifo:		;CALL	LCD_cursor_back
 					
 					CALL	GetFifoChar
 					
@@ -463,7 +436,7 @@ Respond2Fifo:				;CALL	LCD_cursor_back
 					
 ;					RETURN
 					
-;This is not currently called
+
 Display8:			LOAD	  cursor_position, 07	;position cursor just after touch value
                     CALL	  LCD_position_cursor
                     
@@ -534,26 +507,26 @@ Display2:			LOAD	  cursor_position, 07	;position cursor just after touch value
 					INPUT		 s5,DemodPeak				;will also reset the peak value
 					CALL		 Displays5
 					
-;This is the part that displays the signal amplitudes - disable for th emoment (Jan 2016) to allow normal display...					
-;					LOAD	  	cursor_position, C0	;position cursor
- ;                   CALL	  	LCD_position_cursor
+					
+					LOAD	  	cursor_position, C0	;position cursor
+                    CALL	  	LCD_position_cursor
 
-	;				INPUT	 	 s5,StartToneA					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StartToneALong					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StartToneB					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StartToneBLong					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StopToneA					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StopToneALong					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StopToneB					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StopToneBLong					
-	;				CALL		 Displays5
+					INPUT	 	 s5,StartToneA					
+					CALL		 Displays5
+					INPUT		 s5,StartToneALong					
+					CALL		 Displays5
+					INPUT		 s5,StartToneB					
+					CALL		 Displays5
+					INPUT		 s5,StartToneBLong					
+					CALL		 Displays5
+					INPUT		 s5,StopToneA					
+					CALL		 Displays5
+					INPUT		 s5,StopToneALong					
+					CALL		 Displays5
+					INPUT		 s5,StopToneB					
+					CALL		 Displays5
+					INPUT		 s5,StopToneBLong					
+					CALL		 Displays5
 					
 					
 
@@ -561,18 +534,18 @@ Display2:			LOAD	  cursor_position, 07	;position cursor just after touch value
 					
 
 ;Enter with s0 - LSB, s1 - MSB
-SetTxFreq:	   	 	FETCH     s0, TX_F_MSB        ; Value for TX frequency being used
+SetTxFreq:	   	 	FETCH     s0, TX_F_MSB        ; store value for 86.95kHz
                     OUTPUT    s0, TXFreqMSB
 
                     FETCH     s0, TX_F_LSB
                     OUTPUT    s0, TXFreqLSB       ; and send value to SSB modulator
 					RETURN
 
-SetRxFreq:	   	 	FETCH     s0, RX_F_MSB        ; Value for RX frequency being used
+SetRxFreq:	   	 	FETCH     s0, RX_F_MSB        ; store value for 86.95kHz
                     OUTPUT    s0, RXFreqMSB
 
                     FETCH     s0, RX_F_LSB
-                    OUTPUT    s0, RXFreqLSB       ; and send value to SSB demodulator
+                    OUTPUT    s0, RXFreqLSB       ; and send value to SSB modulator
 					RETURN
 
 
@@ -582,7 +555,7 @@ SetRxFreq:	   	 	FETCH     s0, RX_F_MSB        ; Value for RX frequency being us
 ;					OUT		s0,ChooseTouchKey
 ;					RETURN
 					
-SendParamBack:		INPUT	s5,PTT		   ;********************TEST reading touch***********************************
+SendParamBack:		INPUT	s5,TouchSignal		   ;********************TEST reading touch***********************************
 					CALL	Export2User	
 					RETURN	
 
@@ -829,7 +802,6 @@ LCD_enable_pulse:   OR        LCD_control, LCD_E  ; set enable bit (E=1)
                     XOR       LCD_control, LCD_E  ; reset enable bit (E=0)
                     OUTPUT    LCD_control, LCD_control_port;
                     CALL      delay_50us          ; >40us delay
-                    CALL      delay_50us          ; >40us delay - to make sure!
                     RETURN
 ;
 

@@ -1,5 +1,3 @@
-;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
-;GV06 increase SSB amplitude on TX
 ;GV03 corrected OutAmp doubling and increased speaker volume
 ;GV02 Halved AGC thresholds to avoid clipping
 ;GV01 Reduce Speaker volume by increasing AGC value to 63 on startup
@@ -132,7 +130,7 @@ CONSTANT	BTaudioMSB,		6'd                   ; Input from headset micro
 CONSTANT	BTaudioLSB,		7'd                   ; 
 CONSTANT	RAMdataMSB,		8'd					  ;Data from variable storage RAM
 CONSTANT	RAMdataLSB,		9'd
-CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone, bit 2 is TX_high
+CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone.
 
 
 
@@ -174,8 +172,6 @@ CONSTANT	StopToneALong,		24'd
 CONSTANT	StopToneB,			25'd
 CONSTANT	StopToneBLong,		26'd
 
-CONSTANT	MSBBTAudio,			27'd
-CONSTANT	LSBBTAudio,			28'd
 
 
 ; Scratchpad registers
@@ -503,25 +499,15 @@ AwaitRise:          INPUT     s0, Strobe
 ;	                    OUT       s3, CmdToUser	  	;Send receive signal in 7 bits (divide by 2!) to user pico to send to UART
 ;__________________________________
 
+ 							CALL	AudioDouble		   ;increase volume 12 dB! Add 2 of these 26/2/15
+; 							CALL	AudioDouble		   ;increase volume 12 dB! stop March 16
  
  
 		 				    OUTPUT    s1, MSBAudio	   
-          					    OUTPUT    s0, LSBAudio
-
- 						CALL	AudioDouble		   ;increase volume 6 dB! Add 2 of these 26/2/15
-
-
- 						CALL	AudioDouble		   ;increase volume 12 dB! Add may 16
- 						CALL	AudioDouble		   ;increase volume 12 dB! 
-
-;						AND	s0, f8			;Make bottom 3 bits zero in case is 13 bit linear and these are attenuation bits
-						    OUTPUT    s1, MSBBTAudio	   
-          					    OUTPUT    s0, LSBBTAudio
-
-
+        					OUTPUT    s0, LSBAudio
 ;Display demodulated values only in receive
-							OUTPUT  s1,Data2archiveMSB 	  	  		  ;This is received demodulated data
-							OUTPUT  s0,Data2archiveLSB
+							OUTPUT  s0,Data2archiveMSB 	  	  		  ;This is received demodulated data
+							OUTPUT  s1,Data2archiveLSB
 							SLA		s0				  ;shift top bit into carry
 							ADDCY	s1,00			  ;s1 now rounded value of upper 8 bits (but s0 wasted!)
 					
@@ -555,19 +541,6 @@ BackfromTransmitting: 	INPUT   s0, Command         ; Check if FIFO character pre
 ;Need to overhaul this !! Oct2015
 ;So do this bit at 8kHz rate - so has about a 1s time constant
 ; Add 1/32 x abs(new normalised value - which is 256 times smaller than averaged value)
-
-
-
-				INPUT 	s2,Status
-				AND	s2,06	 ;look at bit 1 and 2
-					
-;In this version switching to BT input is through external multiplexer to go through emphasis filter
-				COMPARE s2,04	 ;True if BT signal present and TX_high
-					
-				JUMP  Z,    AwaitAudioVal  ;Don't do anything if on BT and TX_high
-
-
-
                     FETCH      s3, NormalisedMagMSB
                     FETCH      s2, NormalisedMagLSB		  ;These are absolute values
 
@@ -1040,8 +1013,8 @@ SkipNoBT:
 				CALL      PerformFIR
 				;This should have decreased amplitude by about 6dB	
 				
-				OUTPUT     s1,Data2archiveMSB 		
-				OUTPUT     s0,Data2archiveLSB
+				OUTPUT     s0,Data2archiveMSB 		
+				OUTPUT     s1,Data2archiveLSB
 				
 
 
@@ -1053,7 +1026,6 @@ SkipNoBT:
 					CALL TryAndDouble
 					CALL TryAndDouble
 					CALL TryAndDouble
-					CALL TryAndDouble	;try add for upgrade of production code
 					
 					
 								   		   	
@@ -1215,24 +1187,16 @@ decreaseAGC2: 	   CALL decreaseAGC
 
 
 
-; AGC takes 16 bit value, MSB in s1, LSB in s0 and returns normalised 16 bit value in s1,s0 using AGC value from s3, using external MUX for coarse control
+; AGC takes 24 bit value, MSB in s2, LSB in s0 and returns normalised 16 bit value in s1,s0 using AGC value from s3
 ;AGC value in s3 should vary  0-63 in this version - higher value is higher attenuation so use higher significant bits on input MUX (4 bits - 16 inputs)
 ; This routine can also be use for the volume setting if value put in s3 ????????
-AGC:   				INPUT 	s2,Status
-				AND	s2,06	 ;look at bit 1 and 2
-					
-;In this version switching to BT input is through external multiplexer to go through emphasis filter
-				COMPARE s2,04	 ;True if BT signal present and TX_high
-					
-				RETURN Z   ;Don't do anything if on BT and TX_high
-	   	   	
-				SRX		  s3   	 			  ;divide s3 by 2 to get last AGC and put last bit into carry
-				CALL	  C,decrease1_5dB		  ;if last bit set then reduce by 3dB
-				SRX		  s3   	 			  ;divide s3 by 2 to get old AGC and put last bit into carry
-				CALL	  C,decrease3dB		  ;if last bit set then reduce by 3dB
+AGC:   		   	   	SRX		  s3   	 			  ;divide s3 by 2 to get last AGC and put last bit into carry
+					CALL	  C,decrease1_5dB		  ;if last bit set then reduce by 3dB
+					SRX		  s3   	 			  ;divide s3 by 2 to get old AGC and put last bit into carry
+					CALL	  C,decrease3dB		  ;if last bit set then reduce by 3dB
 
-	   		   	OUTPUT		  s3,MUXport		  ;Now simply use remaining 4 bits to drive the MUX
-	   		   	RETURN
+	   		   	    OUTPUT		  s3,MUXport		  ;Now simply use remaining 4 bits to drive the MUX
+	   		   	    RETURN
                     
 ;AGCloop:            COMPARE      s3, 00
  ;                   RETURN       Z                   ; escape if AGC value zero

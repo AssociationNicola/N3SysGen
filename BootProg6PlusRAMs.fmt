@@ -1,0 +1,296 @@
+                        ; This uses an extra line, but assumes the retcommand at line 33 is re-written OK
+                        ;;;CONSTANT LCD_data_port,  08                   ; Data to LCD display
+                        ;;;CONSTANT LCD_control_port, 09                   ; Control signals to LCD display
+                        ;;;CONSTANT LCD_RS,    01                   ; bit0 - Register Select - command(0) or data(1)
+                        ;;;CONSTANT LCD_RW              EQU       2                   ; bit1 - read(1) or write(0)
+                        ;;;CONSTANT LCD_E               EQU       4                   ; bit2 - Enable(1)
+                        ;;;CONSTANT delay_1us_constant  EQU       12                  ; Value (13)19 or 12? decimal suitable for 50MHz clock – about 8 for 20MHz
+                        ;;;CONSTANT LCD_data            EQU       sF                  ; registers used for data and control of LCD
+                        ;;;CONSTANT LCD_control         EQU       sE                  ; E=bit2,  R/W=bit1,  RS=bit0
+                        ;;;CONSTANT cursor_position     EQU       sD                  ; register to define cursor position on LCD display
+                        ;;;CONSTANT counter             EQU       sC                  ; Counter - for Acquisitions
+                        ; Input port
+                        CONSTANT Uart_rx, 00
+                        CONSTANT Uart_status, 01
+                        ;;;CONSTANT ADC_cntr   02
+                        ;;;CONSTANT ADC_value   03
+                        ; Output ports
+                        CONSTANT DataLatch, 00
+                        CONSTANT Uart_Tx, 01
+                        ;;;CONSTANT Gain,    02
+                        CONSTANT Instructiona, 03     ; Most significant bits of instruction
+                        CONSTANT Instructionb, 04
+                        CONSTANT Instructionc, 05
+                        CONSTANT ProgramL, 06
+                        CONSTANT ProgramM, 07         ; bits 0 and 1 for address, ( removed - subsequent 3 bits to select
+                        ; which pico to write (bits 2,3,4 decoded), bit 5 enable archive,
+                        ; bit 6 select source and bit 7 TXhigh)
+                        CONSTANT RAMWriteContol, 25'd ; select target pico - from above register in new setup
+                        ;;;CONSTANT LCDdata,   08
+                        ;;;CONSTANT LCDctrl,   09
+                        ;;;CONSTANT FreqLSB             EQU       10
+                        ;;;CONSTANT FreqMSB             EQU       11
+                        ;;;CONSTANT UserToDSPTx         DSOUT     0
+                        ;;;CONSTANT UserToBTTx          DSOUT     20
+                        ;;;CONSTANT UserToKPTx          DSOUT     21
+                        CONSTANT RAMDataMSB, 16       ; 22                  ; To send to KP, DSP or BT picos
+                        CONSTANT RAMDataLSB, 17       ; 23                  ; To send to KP, DSP or BT picos
+                        ; ;;GenerateCode        MEM       "BootProgMultiPico.mem"
+                        ; Program modified Jan 2010 to be able to reload more than 2 picoblazes, while maintaining start of loaded program at $20
+                        ; User pico must be re-programmed last!
+                        ; This is the bootprog program to program two picoblazes as in Spartan3E_ADCRX_TX.mdl
+                        ; Start of test program
+                        ; Modified Nov 2007, to allow it to be re-loaded and re-boot
+                        ; Procedure get user program to return to instruction zero (eg jump reboot - currently by sending a 'Q') then perform
+                        ; ProgramUser('BootProgMultiPico.mem'); %(This program)
+                        ; ProgramDSP('S3eDSPprog.mem');
+                        ; ProgramBTpico('BTprog.mem');
+                        ; ProgramUser('S3eUser_interface.mem');
+                  boot: JUMP NewProg
+                 start: CALL GetByte
+                        COMPARE s1, 40                ;64'd              ; is start byte = 64
+                        JUMP Z, DoUserProg
+                        COMPARE s1, 41                ;65'd              ; is byte = 65 or above - this is actually just to fill lines!
+                        JUMP NC, ProgOtherPico        ; This will actually write DSP or other prog (start byte =65 or greater)
+                        JUMP start
+            DoUserProg: LOAD s7, 04
+                        LOAD s2, 20                   ; 32'd
+                        LOAD s3, 00                   ; s2 (LSB),s3(USB) of prog counter of first address of new program!
+               GetProg: CALL GetByte
+                        COMPARE s1, 50                ; 80'd              ; 80 ($50) indicates end of program
+                        JUMP Z, NewProg               ; When end of prog byte 80 is received
+                        OUTPUT s1, Instructiona
+                        CALL GetByte
+                        OUTPUT s1, Instructionb
+                        CALL GetByte
+                        OUTPUT s1, Instructionc       ; write 3x 6bits to latches ready for instruction write
+                        OUTPUT s2, ProgramL
+                        OUTPUT s3, ProgramM           ; Load memory address to write (starting from 32!)
+                        LOAD s4, s7
+                        OUTPUT s4, RAMWriteContol
+                        LOAD s4, 00
+                        OUTPUT s4, RAMWriteContol
+                        ADD s2, 01
+                        ADDCY s3, 00                  ; Increment program counter
+                        JUMP GetProg                  ; Get next instruction
+               GetByte: INPUT s0, Uart_status         ; Is there a byte available?
+                        AND s0, 01
+                        COMPARE s0, 01
+                        JUMP NZ, GetByte              ; until there is a byte in the input buffer!
+                        INPUT s1, Uart_rx
+                        ; if the User prog is loaded then the previous commands will never be loaded
+                        RETURN 
+                        ; NOTE THANT ONCE THE USER PROG HAS BEEN RELOADED, THEN THE DSP CAN NOT BE RELOADED UNLESS THIS CODE BELOW IS RELOADED!
+               NewProg: JUMP start                    ; Prog data must load in from here (Address $20)
+         ProgOtherPico: COMPARE s1, 41                ; 65              ; is byte = 65? A
+                        JUMP Z, ProgDSP               ; 65 means program DSP
+                        COMPARE s1, 42                ; 66              ; is byte = 66 B
+                        JUMP Z, ProgBTpico            ; 66 means program BT picoblaze
+                        COMPARE s1, 43                ; 67              ; is byte = 67 C
+                        JUMP Z, ProgKeyPadpico        ; 67 means program KeyPadpico
+                        COMPARE s1, "F"               ; is byte = 'F' BT RAM
+                        JUMP Z, Prog_BT_RAM_mem       ; 'R' means program BT RAM
+                        COMPARE s1, "G"               ; is byte = 'G' KEYPAD RAM
+                        JUMP Z, Prog_Keypad_RAM_mem   ; 'R' means program BT RAM
+                        COMPARE s1, "R"               ; is byte = 'R' BT RAM
+                        JUMP Z, Prog_BT_RAM           ; 'R' means program BT RAM
+                        COMPARE s1, "S"               ; is byte = 'S' KEYPAD RAM
+                        JUMP Z, Prog_Keypad_RAM       ; 'R' means program BT RAM
+                        JUMP start
+               ProgDSP: LOAD s7, 08
+                        LOAD s2, 00
+                        LOAD s3, 00                   ; s2 (LSB),s3(USB) of prog counter of first address of new program ie 0 for DSP!
+            GetProgDSP: CALL GetByte
+                        COMPARE s1, 50                ; 80              ; 80 ($50) indicates end of program (assumes this apears before end of program space!)
+                        JUMP Z, ResetDSP              ; When end of prog byte 80 is received reset DSP processor
+                        OUTPUT s1, Instructiona
+                        CALL GetByte
+                        OUTPUT s1, Instructionb
+                        CALL GetByte
+                        OUTPUT s1, Instructionc       ; write 3x 6bits to latches ready for instruction write
+                        OUTPUT s2, ProgramL
+                        OUTPUT s3, ProgramM           ; Load memory address to write (starting from 0!)
+                        LOAD s4, s7
+                        OUTPUT s4, RAMWriteContol
+                        LOAD s4, 00
+                        OUTPUT s4, RAMWriteContol
+                        ADD s2, 01
+                        ADDCY s3, 00                  ; Increment program counter
+                        JUMP GetProgDSP               ; Get next instruction
+            ProgBTpico: LOAD s7, 0C                   ;12              ; sets bits 2 and 3
+                        LOAD s2, 00
+                        LOAD s3, 00                   ; s2 (LSB),s3(USB) of prog counter of first address of new program ie 0 for DSP!
+         GetProgBTpico: CALL GetByte
+                        COMPARE s1, 50                ; 80              ; 80 ($50) indicates end of program (assumes this apears before end of program space!)
+                        JUMP Z, ResetDSP              ; When end of prog byte 80 is received reset picoblaze processors
+                        OUTPUT s1, Instructiona
+                        CALL GetByte
+                        OUTPUT s1, Instructionb
+                        CALL GetByte
+                        OUTPUT s1, Instructionc       ; write 3x 6bits to latches ready for instruction write
+                        OUTPUT s2, ProgramL
+                        OUTPUT s3, ProgramM           ; Load memory address to write (starting from 0!)
+                        LOAD s4, s7
+                        OUTPUT s4, RAMWriteContol
+                        LOAD s4, 00
+                        OUTPUT s4, RAMWriteContol
+                        ADD s2, 01
+                        ADDCY s3, 00                  ; Increment program counter
+                        JUMP GetProgBTpico            ; Get next instruction
+        ProgKeyPadpico: LOAD s7, 10                   ; 16              ; sets bits 4
+                        LOAD s2, 00
+                        LOAD s3, 00                   ; s2 (LSB),s3(USB) of prog counter of first address of new program ie 0 for DSP!
+     GetProgKeyPadpico: CALL GetByte
+                        COMPARE s1, 50                ; 80              ; 80 ($50) indicates end of program (assumes this apears before end of program space!)
+                        JUMP Z, ResetDSP              ; When end of prog byte 80 is received reset picoblaze processors
+                        OUTPUT s1, Instructiona
+                        CALL GetByte
+                        OUTPUT s1, Instructionb
+                        CALL GetByte
+                        OUTPUT s1, Instructionc       ; write 3x 6bits to latches ready for instruction write
+                        OUTPUT s2, ProgramL
+                        OUTPUT s3, ProgramM           ; Load memory address to write (starting from 0!)
+                        LOAD s4, s7
+                        OUTPUT s4, RAMWriteContol
+                        LOAD s4, 00
+                        OUTPUT s4, RAMWriteContol
+                        ADD s2, 01
+                        ADDCY s3, 00                  ; Increment program counter
+                        JUMP GetProgKeyPadpico        ; Get next instruction
+              ResetDSP: OR s4, 1C                     ; 28              ; to send reset to DSP + other picoblazes... (sets bits 3,4,5 of ProgramM)
+                        OUTPUT s4, ProgramM
+                        LOAD s4, 00
+                        OUTPUT s4, ProgramM
+                        JUMP start                    ; Go back and wait for another program
+           Prog_BT_RAM: 
+                        LOAD s7, 18                   ; $18             ; sets bits 4
+                        LOAD s2, 00
+                        LOAD s3, 00                   ; s2 (LSB),s3(USB) of prog counter of first address of new program ie 0 for DSP!
+      Prog_BT_RAM_Loop: 
+                        CALL GetByte
+                        COMPARE s1, 7F                ; $7F             ; $7F indicates end of program (assumes this apears before end of program space!)
+                        JUMP Z, ResetDSP              ; When end of prog byte 80 is received reset picoblaze processors
+                        LOAD s5, s1
+                        CALL GetByte
+                        COMPARE s1, 7F                ;$7F             ; $7F indicates end of program (assumes this apears before end of program space!)
+                        JUMP Z, ResetDSP              ; When end of prog byte 80 is received reset picoblaze processors
+                        OUTPUT s1, RAMDataLSB
+                        OUTPUT s5, RAMDataMSB
+                        OUTPUT s2, ProgramL
+                        OUTPUT s3, ProgramM           ; Load memory address to write (starting from 0!)
+                        LOAD s4, s7
+                        OUTPUT s4, RAMWriteContol
+                        LOAD s4, 00
+                        OUTPUT s4, RAMWriteContol
+                        ADD s2, 01
+                        ADDCY s3, 00                  ; Increment program counter
+                        JUMP Prog_BT_RAM_Loop
+       Prog_Keypad_RAM: 
+                        LOAD s7, 20                   ; $20             ; sets bits
+                        LOAD s2, 00
+                        LOAD s3, 00                   ; s2 (LSB),s3(USB) of prog counter of first address of new program ie 0 for DSP!
+  Prog_Keypad_RAM_Loop: 
+                        CALL GetByte
+                        COMPARE s1, 7F                ; $7F             ; $7F indicates end of program (assumes this apears before end of program space!)
+                        JUMP Z, ResetDSP              ; When end of prog byte 80 is received reset picoblaze processors
+                        LOAD s5, s1
+                        CALL GetByte
+                        COMPARE s1, 7F                ; $7F             ; $7F indicates end of program (assumes this apears before end of program space!)
+                        JUMP Z, ResetDSP              ; When end of prog byte 80 is received reset picoblaze processors
+                        OUTPUT s1, RAMDataLSB
+                        OUTPUT s5, RAMDataMSB
+                        OUTPUT s2, ProgramL
+                        OUTPUT s3, ProgramM           ; Load memory address to write (starting from 0!)
+                        LOAD s4, s7
+                        OUTPUT s4, RAMWriteContol
+                        LOAD s4, 00
+                        OUTPUT s4, RAMWriteContol
+                        ADD s2, 01
+                        ADDCY s3, 00                  ; Increment program counter
+                        JUMP Prog_Keypad_RAM_Loop
+       Prog_BT_RAM_mem: 
+                        LOAD s7, 18                   ; $18             ; sets bits 4
+                        LOAD s2, 00
+                        LOAD s3, 00                   ; s2 (LSB),s3(USB) of prog counter of first address of new program ie 0 for DSP!
+    GetProg_BT_RAM_mem: 
+                        CALL GetByte
+                        COMPARE s1, 50                ; 80              ; 80 ($50) indicates end of program (assumes this apears before end of program space!)
+                        JUMP Z, ResetDSP              ; When end of prog byte 80 is received reset DSP processor
+                        LOAD s8, s1                   ; first 6 bits
+                        CALL GetByte
+                        LOAD s9, s1                   ; second 6 bits
+                        CALL GetByte
+                        LOAD sA, s1                   ; third 6 bits
+                        AND s8, 3F                    ; $3F             ; most significant
+                        AND s9, 3F                    ; $3F             ; middle 6
+                        AND sA, 3F                    ; $3F             ; lower 6 bits
+                        LOAD sB, s9
+                        AND sB, 03                    ; $03             ; bottom 2 bits  UU UUUUMMMM  MMLLLLLL
+                        SL0 sB                        ; shift 6 bits
+                        SL0 sB                        ; shift 6 bits
+                        SL0 sB                        ; shift 6 bits
+                        SL0 sB                        ; shift 6 bits
+                        SL0 sB                        ; shift 6 bits
+                        SL0 sB                        ; shift 6 bits
+                        OR sA, sB
+                        SR0 s9                        ; shift down 2 bits
+                        SR0 s9
+                        SL0 s8                        ; shift up 2 bits
+                        SL0 s8
+                        SL0 s8
+                        SL0 s8
+                        OR s9, s8
+                        OUTPUT sA, RAMDataLSB
+                        OUTPUT s9, RAMDataMSB
+                        OUTPUT s2, ProgramL
+                        OUTPUT s3, ProgramM           ; Load memory address to write (starting from 0!)
+                        LOAD s4, s7
+                        OUTPUT s4, RAMWriteContol
+                        LOAD s4, 00
+                        OUTPUT s4, RAMWriteContol
+                        ADD s2, 01
+                        ADDCY s3, 00                  ; Increment program counter
+                        JUMP GetProg_BT_RAM_mem       ; Get next instruction
+   Prog_Keypad_RAM_mem: 
+                        LOAD s7, 20                   ; $20             ; sets bits
+                        LOAD s2, 00
+                        LOAD s3, 00                   ; s2 (LSB),s3(USB) of prog counter of first address of new program ie 0 for DSP!
+GetProg_Keypad_RAM_mem: 
+                        CALL GetByte
+                        COMPARE s1, 50                ; 80              ; 80 ($50) indicates end of program (assumes this apears before end of program space!)
+                        JUMP Z, ResetDSP              ; When end of prog byte 80 is received reset DSP processor
+                        LOAD s8, s1
+                        CALL GetByte
+                        LOAD s9, s1
+                        CALL GetByte
+                        LOAD sA, s1                   ; write 3x 6bits to latches ready for instruction write
+                        AND s8, 3F                    ; $3F             ; most significant
+                        AND s9, 3F                    ; $3F             ; middle 6
+                        AND sA, 3F                    ; $3F             ; lower 6 bits
+                        LOAD sB, s9
+                        AND sB, 03                    ; $03             ; bottom 2 bits  UU UUUUMMMM  MMLLLLLL
+                        SL0 sB                        ; shift 6 bits
+                        SL0 sB                        ; shift 6 bits
+                        SL0 sB                        ; shift 6 bits
+                        SL0 sB                        ; shift 6 bits
+                        SL0 sB                        ; shift 6 bits
+                        SL0 sB                        ; shift 6 bits
+                        OR sA, sB
+                        SR0 s9                        ; shift down 2 bits
+                        SR0 s9
+                        SL0 s8                        ; shift up 2 bits
+                        SL0 s8
+                        SL0 s8
+                        SL0 s8
+                        OR s9, s8
+                        OUTPUT sA, RAMDataLSB
+                        OUTPUT s9, RAMDataMSB
+                        OUTPUT s2, ProgramL
+                        OUTPUT s3, ProgramM           ; Load memory address to write (starting from 0!)
+                        LOAD s4, s7
+                        OUTPUT s4, RAMWriteContol
+                        LOAD s4, 00
+                        OUTPUT s4, RAMWriteContol
+                        ADD s2, 01
+                        ADDCY s3, 00                  ; Increment program counter
+                        JUMP GetProg_Keypad_RAM_mem   ; Get next instruction

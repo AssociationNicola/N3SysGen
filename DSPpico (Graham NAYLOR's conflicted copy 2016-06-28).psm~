@@ -1,5 +1,4 @@
-;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
-;GV06 increase SSB amplitude on TX
+;GV06 increase SSB amplitude on TX 
 ;GV03 corrected OutAmp doubling and increased speaker volume
 ;GV02 Halved AGC thresholds to avoid clipping
 ;GV01 Reduce Speaker volume by increasing AGC value to 63 on startup
@@ -503,25 +502,23 @@ AwaitRise:          INPUT     s0, Strobe
 ;	                    OUT       s3, CmdToUser	  	;Send receive signal in 7 bits (divide by 2!) to user pico to send to UART
 ;__________________________________
 
+ 							CALL	AudioDouble		   ;increase volume 6 dB! Add 2 of these 26/2/15
+ 							CALL	AudioDouble		   ;increase volume 6 dB! stop March 16
  
  
 		 				    OUTPUT    s1, MSBAudio	   
           					    OUTPUT    s0, LSBAudio
+ 						CALL	AudioDouble		   ;increase volume 6 dB! Add may 16
+; 						CALL	AudioDouble		   ;increase volume 6 dB! 
 
- 						CALL	AudioDouble		   ;increase volume 6 dB! Add 2 of these 26/2/15
-
-
- 						CALL	AudioDouble		   ;increase volume 12 dB! Add may 16
- 						CALL	AudioDouble		   ;increase volume 12 dB! 
-
-;						AND	s0, f8			;Make bottom 3 bits zero in case is 13 bit linear and these are attenuation bits
+						AND	s0, f8			;Make bottom 3 bits zero in case is 13 bit linear and these are attenuation bits
 						    OUTPUT    s1, MSBBTAudio	   
           					    OUTPUT    s0, LSBBTAudio
 
 
 ;Display demodulated values only in receive
-							OUTPUT  s1,Data2archiveMSB 	  	  		  ;This is received demodulated data
-							OUTPUT  s0,Data2archiveLSB
+							OUTPUT  s0,Data2archiveMSB 	  	  		  ;This is received demodulated data
+							OUTPUT  s1,Data2archiveLSB
 							SLA		s0				  ;shift top bit into carry
 							ADDCY	s1,00			  ;s1 now rounded value of upper 8 bits (but s0 wasted!)
 					
@@ -1040,8 +1037,8 @@ SkipNoBT:
 				CALL      PerformFIR
 				;This should have decreased amplitude by about 6dB	
 				
-				OUTPUT     s1,Data2archiveMSB 		
-				OUTPUT     s0,Data2archiveLSB
+				OUTPUT     s0,Data2archiveMSB 		
+				OUTPUT     s1,Data2archiveLSB
 				
 
 

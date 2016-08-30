@@ -1,0 +1,32 @@
+--------------------------------- Version Log ----------------------------------
+Version                                 Path
+System Generator 2014.4                 C:/Xilinx/Vivado/2014.4
+Matlab 8.2.0.701 (R2013b)               C:\MATLAB\R2013b
+Vivado 2014.4                           C:/Xilinx/Vivado/2014.4
+--------------------------------------------------------------------------------
+Summary of Errors:
+Error 0001: Error using xlAssociateSettings>xlAssociateSettingsSizesO...
+     Block: 
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+
+Details:
+Error using xlAssociateSettings>xlAssociateSettingsSizesOnly (line 169)
+Invalid Simulink object handle
+
+Error in xlAssociateSettings (line 17)
+
+
+Error in xlCompileGenerateMdl (line 193)
+
+
+Error in xlGenerateButton (line 316)
+
+
+Error in xlSysgenGUI (line 67)
+
+
+--------------------------------------------------------------------------------

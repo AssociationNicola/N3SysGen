@@ -1,14 +1,3 @@
-;GV08 lower audio volume control to about 0.8V (Prod7)
-;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
-;GV06 Increase output amplitude of SSB in DSPpico on TX
-;GV05 Modified frequencies (MMCM and KeypadPico values) to work with 33.333MHz clock for production model (Apr 2012)
-;GV04 Now using mic preamp so need to fix AGCs
-;GV03 Mods to DSP to try and get volume load and saturate OutAmp properly
-;GV02 Halved AGC thresholds to avoid clipping SysGen v1.18
-;GV01 add redirect command SW for UART to patch through to BT module
-;GV01 Reduce Speaker volume AGC on startup
-;GV00 Reset GV to 0 for new TE0722 working version
-
 ;GVA5 for TE0722, with RX/TX frequencies adjusted for 32.768MHz
 ;GVA4 corrected DSPprog to not crash (AGC suddenly dropping)
 ;GVA2 send demod level to LCD display
@@ -106,8 +95,7 @@
 ; Now for Godil Board
 ; Version for multi pico boot with shifted bit offsets on oport
 
-CONSTANT Versionno,			08               ; 1 July 2016
-CONSTANT InitialVolume,			133'd		;lowerred volume
+CONSTANT Versionno,			A5                 ; Dec 2015
 
 CONSTANT MinorVersionno,    EE                 ; Pete
 
@@ -189,7 +177,7 @@ CONSTANT AGClowerTX,       06
 
 
 
-CONSTANT delay_1us_constant,       12'd                  ; Now 49.152MHz Value (13)19 or 12? decimal suitable for 50MHz clock or about 6 for 33MHz?
+CONSTANT delay_1us_constant,       12'd                  ; Value (13)19 or 12? decimal suitable for 50MHz clock – about 8 for 20MHz
 
 CONSTANT WREN,			06                 ; (enable writing)
 CONSTANT FAST_READ,		0B                 ; followed by 3 address bytes, 1 dummy byte and then n bytes to feed back data and leave last 2 values for readback
@@ -222,7 +210,7 @@ CONSTANT ADCAGCUpperThreshold,	25'd                  ; Sets value for AGC on RAW
 CONSTANT ADCAGCLowerThreshold,	26'd                  ; Sets value for AGC on RAW input
 CONSTANT ADCGainTX,				27'd                  ; Analogue gain for TX
 CONSTANT ADCGainRX,				28'd                  ; Analogue gain for RX
-;removed Attenuator state
+CONSTANT AttenuatorState,		29'd                  ; Lowest bit indicates if Attenuator is used
 
 CONSTANT BluetoothXmit,			43                 ; from Pete's build - assumes large scratchpad
 
@@ -284,14 +272,13 @@ CONSTANT EnArchive,				64'd
 CONSTANT TX_HIGH,				128'd                 ; bit 7
 
 
-CONSTANT SelectArchiveSource,			8'd
-CONSTANT Configure,				9'd
+CONSTANT SelectArchiveSource,	8'd
 
 CONSTANT RXFreqMSB,				10'd                  ; 769A for 88.956kHz ie 86.956kHz carrier and allow range up to 154kHz
 CONSTANT RXFreqLSB,				11'd
 
-CONSTANT AudioVolume,				12'd                  ; Initialy 141
-CONSTANT Tone,				13'd			; Carrier increment to cause a tone modulation on TX
+CONSTANT TXFreqMSB,				12'd                  ; 3710  with 49MHz clock
+CONSTANT TXFreqLSB,				13'd
 CONSTANT Acknowledge,			14'd
 ; offsets:
 CONSTANT DSPFifo,				16'd
@@ -314,7 +301,7 @@ CONSTANT CMD2BT,				20'd
 CONSTANT CMD2KP,				21'd
 CONSTANT RAMDataMSB,			22'd                  ; To send to KP, DSP or BT picos
 CONSTANT RAMDataLSB,			23'd                  ; To send to KP, DSP or BT picos
-CONSTANT RAMwriteControl,		25'd
+CONSTANT AttenuatorControl,		24'd
 
 
 ; ;; Pete - Bluetooth
@@ -339,7 +326,7 @@ DoUserProg:         LOAD      s7, 04
                     LOAD      s3, 00               ; s2 (LSB),s3(USB) of prog counter of first address of new program!
 
 GetProg:            CALL      GetByte
-                    COMPARE      s1, 80'd              ; 80 ($50) indicates end of program
+                    COMPARE      s1, 80              ; 80 ($50) indicates end of program
                     JUMP      Z, cold_start       ; When end of prog byte 80 is received
                     OUTPUT       s1, Instructiona
                     CALL      GetByte
@@ -349,10 +336,10 @@ GetProg:            CALL      GetByte
 
                     OUTPUT       s2, ProgramL
                     OUTPUT       s3, ProgramM        ; Load memory address to write (starting from 32!)
-                    LOAD      s4, s7		; Set bit 2 to perform write to RAM 1 or bit 3 to write RAM 2 depending whether start byte was 64 or 65
-                    OUTPUT       s4, RAMwriteControl
-		    LOAD        s4, 00                            
-                    OUTPUT       s4, RAMwriteControl        ; Set write line back to zero
+                    LOAD      s4, s3
+                    OR        s4, s7              ; Set bit 2 to perform write to RAM 1 or bit 3 to write RAM 2 depending whether start byte was 64 or 65
+                    OUTPUT       s4, ProgramM
+                    OUTPUT       s3, ProgramM        ; Set write line back to zero
                     ADD       s2, 01
                     ADDCY      s3, 00               ; Increment program counter
                     JUMP      GetProg             ; Get next instruction					
@@ -363,6 +350,39 @@ GetByte:            INPUT        s0, Uart_status     ; Is there a byte available
                     JUMP      NZ, GetByte         ; until there is a byte in the input buffer!
                     INPUT        s1, Uart_rx
                     RETURN       
+; Program re-written from here
+; LOAD	  s0,0				  		 ;dummy
+; ProgDSP:
+
+; -------------Test of BT chip
+; 				    CALL      CheckUartRx
+; JUMP      NZ,noInput			 		  ;See if anything on input from serial port
+; 
+; INPUT        s5, Uart_rx         ; get character
+; 					CALL	  Byte2Chars
+; 
+; OUTPUT		  s6,BTFifo			  ;send MS4bits to BT pico
+; OUTPUT		  s7,BTFifo			  ;send LS4bits char to BT pico
+; 
+; 
+; 
+; noInput:			INPUT        s1, BTcmd      ; Get character from BT picoblaze (if present should be less than 128)
+; COMPARE      s1, 128             ; Is the fifo empty though? (if greater than 127) - could use routine like in DSPpico!
+; CALL      NC,ProgDSP	  	; If less than 128 there is a value to give back, otherwise re-start.
+; 
+; 
+; CALL      GetBTFifoChar
+; 				  LOAD      s6, s0              ; get character
+; 				  CALL      GetBTFifoChar
+; 				  LOAD      s7, s0              ; get character
+; 				  CALL		Chars2Byte
+; 				  LOAD		s6,s5	  			;prepare byte in s6 for next call..
+; CALL	  Send2UartTX		  ;Echo back to terminal	    		
+; 				
+; 				
+; 				    JUMP	  ProgDSP			  ;loop back
+
+; -----------------------------------
 
 
 cold_start:         LOAD      s0, 00               ; Note the label 'ProgDSP' is only to allow re-boot to work!
@@ -370,6 +390,7 @@ ProgDSP:
 
 ; need to clear scratchpad
 
+; ;;LOAD  s0, 0
                     LOAD      s1, 00
 ScratchClear: 
                     STORE     s0, (s1)              ; zero location
@@ -392,6 +413,16 @@ init:               LOAD      ScratchPointer, 00
                     STORE     s5, ADCGainTX       ; save initial value forTX
 
 ;Frequency of TX/RX now set by keypad pico
+;                    LOAD      s0, Bmode           ; 1			;start with beacon if mode =1 (should now work!)
+;                    STORE     s0, Mode            ; store setting for beacon mode
+
+;                    LOAD      s0, 05             ; for 31kHz    $0E
+ ;                   STORE     s0, TX_F_MSB        ; store value for 86.95kHz
+  ;                  OUTPUT       s0, TXFreqMSB
+
+;                    LOAD      s0, 2B             ; $7E for N2 and $80 for Heyphone
+ ;                   STORE     s0, TX_F_LSB
+  ;                  OUTPUT       s0, TXFreqLSB       ; and send value to SSB modulator
 
                     LOAD      s0, AGCupperRX
                     STORE     s0, ADCAGCUpperThreshold
@@ -405,10 +436,9 @@ init:               LOAD      ScratchPointer, 00
 
                     LOAD      s1, 00
                     CALL      ArchiveSource
-                    CALL      EnableArchive	
+                    CALL      EnableArchive
 
-		LOAD s0,InitialVolume			;set lowish audio volume
-		OUTPUT s0,AudioVolume
+
 
                     CALL      delay_100ms
 
@@ -465,7 +495,7 @@ HandleBTCommand_Done:
                     JUMP      Z, interpcommand    ; This is end of command character
                     COMPARE      s6, 10'd
                     JUMP      Z, loop             ; If LF ignore
-                    COMPARE      ScratchPointer, 16'd  ; Check we are not writing too many characters to the scratchpad
+                    COMPARE      ScratchPointer, 16  ; Check we are not writing too many characters to the scratchpad
                     JUMP      NC, loop            ; don't write to scratch if Pointer (counter) 16 or above
                     STORE     s6, (ScratchPointer)  ; Save command character
                     ADD       ScratchPointer, 01   ; is a command char so increment
@@ -522,11 +552,30 @@ Fourth:             COMPARE      s0, 28'd              ; skip if below
                     ADD       s1, 2'd               ; add 2 units (~1.2dB)
 ; now check if s1 (lower decimal digit) is above 9
 Fifth:              COMPARE      s1, 10'd
-                    JUMP      C, ToLCD
+                    JUMP      C, Below10
                     ADD       s2, 1'd               ; Add 1 to first decimal digit
                     SUB       s1, 10'd              ; subtract 10 from lower digit
 
-;Deleted part that tried to apply attenuator
+Below10:            COMPARE      s2, 3'd               ; check if 1st digit 3 or more
+                    CALL      C, resetAttenuator  ; if not
+
+                    COMPARE      s2, 7'd               ; check if already at 7
+                    JUMP      NZ, continue        ; if below 7 then carry on
+                    COMPARE      s1, 3'd
+                    CALL      NC, setAttenuator   ; Is 5 so must be 73
+
+
+continue:           FETCH     s0, AttenuatorState
+                    AND       s0, 1'd               ; look at lowest bit
+                    COMPARE      s0, 1'd
+                    JUMP      NZ, ToLCD           ; isn't set
+                    FETCH     s0, Mode            ; check mode
+                    AND       s0, 2'd
+                    COMPARE      s0, 2'd
+                    JUMP      Z, ToLCD            ; If transmit mode then skip
+                    ADD       s2, 3'd               ; attenuator is set to add 30 to signal strength ONLY ON RECEIVE!
+
+
 
 ToLCD:              OUTPUT       s2, CMD2KP          ; Send first decimal digit (as binary value 0-7)
                     OUTPUT       s1, CMD2KP          ; send second decimal digit (as binary value for 0-9)
@@ -583,7 +632,34 @@ IncreaseADCgain:    FETCH     s0, ADCgain
 
                     RETURN       
 
-;Delete setting and resetting Attenuator (March 2016)
+resetAttenuator:    FETCH	  s0,Latch7
+					AND		  s0,TX_HIGH
+					COMPARE	  s0,TX_HIGH
+					JUMP	  Z,updateAttenuator 	;if in transmit mode then leave attenuator!
+			  		FETCH     s0, AttenuatorState
+                    AND       s0, 1'd
+                    COMPARE      s0, 0'd
+                    RETURN       Z                   ; return if already zero
+                    FETCH     s0, AttenuatorState
+                    AND       s0, FE
+updateAttenuator:   STORE     s0, AttenuatorState
+                    OUTPUT       s0, AttenuatorControl
+                    LOAD      s5, 53             ; gain to lowish
+                    STORE     s5, ADCgain         ; save initial value
+                    STORE     s5, ADCGainRX       ; save initial value for RX
+
+                    CALL      SetAnGain           ; set gain and calibrate	to reset ADC level after attenuator jum (this affects s0)
+                    RETURN       
+
+
+setAttenuator:		FETCH	  s0,Latch7
+					AND		  s0,TX_HIGH
+					COMPARE	  s0,TX_HIGH
+					JUMP	  Z,updateAttenuator
+			  		FETCH     s0, AttenuatorState ; ONLY ON RECEIVE!
+                    OR        s0, 01
+                    JUMP      updateAttenuator
+
 
 
 checkrqst:          COMPARE      s6, "r" 			;character_r
@@ -764,9 +840,6 @@ isS:                CALL      getnextscratchchar
 ; JUMP      Z, isSS             ;
                     COMPARE      s0, 85'd              ; is this a U
                     JUMP      Z, isSU
-		    COMPARE      s0, 87'd              ; is this a W
-                    JUMP      Z, isSW
-
 
                     JUMP      init
 
@@ -834,11 +907,11 @@ setLoranBlank:      FETCH     s0, ADCstate
                     JUMP      init
 
 
-isSKS:                                            ; LOAD      s0, 83'd              ; letter S
+isSKS:                                            ; LOAD      s0, 83              ; letter S
 ; OUTPUT       s0, CMD2KP          ; send S to KP
 
 ; CALL      getnextscratchchar
-; SUB       s0, 48'd
+; SUB       s0, 48
 ; OUTPUT       s0, CMD2KP          ; send select value as binary value to KP
 
                     JUMP      init
@@ -1023,27 +1096,6 @@ isSU:               FETCH     s0, Mode
 
                     JUMP      init                ; 
 
-; Redirect Serial to and from BT module
-isSW:               LOAD s6, "T"
-		CALL Send2UartTX
-		LOAD s6, "O"
-		CALL Send2UartTX
-		LOAD s6, 20	;Space character
-		CALL Send2UartTX
-		LOAD s6, "B"
-		CALL Send2UartTX
-		LOAD s6, "T"
-		CALL Send2UartTX
-		CALL      SendCRLF
-
-		LOAD	s0,01
-		OUTPUT	s0,Configure
-		
-
-                    JUMP      init                ; 
-
-
-
 ; Now get a raw UART byte
 isSSloop:           CALL      CheckUartRx
                     JUMP      NZ, isSSloop        ; loop if nothing in UART buffer
@@ -1154,7 +1206,7 @@ isSRM:              CALL      setRXmode           ; used to be RX, but that does
 
 
 ; Routine to set receive mode - just basic function ie doesn't set mode etc.
-RX:                 LOAD      s5, 48'd              ; Ascii code for '0' - set receive mode
+RX:                 LOAD      s5, 48              ; Ascii code for '0' - set receive mode
                     OUTPUT       s5, CMD2DSP         ; send command to DSP
                     FETCH     s5, Latch7
 
@@ -1198,7 +1250,7 @@ TX:                 LOAD      s5, 49'd              ; Ascii code for '1' - set t
 
 
 ; GET AGC value from DSP
-isGG:               LOAD      s0, 71'd              ; letter G
+isGG:               LOAD      s0, 71              ; letter G
                     OUTPUT       s0, CMD2DSP         ; send G to DSP
                     CALL      SendCRLF
 
@@ -1212,7 +1264,7 @@ isGG:               LOAD      s0, 71'd              ; letter G
 
 
 ; Get AVEsignal level from DSP
-isGS:               LOAD      s0, 83'd              ; letter S
+isGS:               LOAD      s0, 83              ; letter S
                     OUTPUT       s0, CMD2DSP         ; send S to DSP
                     CALL      SendCRLF
 
@@ -1226,7 +1278,7 @@ isGS:               LOAD      s0, 83'd              ; letter S
 
 
 ; send test command to BT pico
-isGB:               LOAD      s0, 71'd              ; letter G
+isGB:               LOAD      s0, 71              ; letter G
                     OUTPUT       s0, CMD2BT          ; send G to BT
 ; 					CALL      SendCRLF
 
@@ -1315,19 +1367,19 @@ Twotone:            LOAD      s0, 66'd              ; Block DSPpico
 ; need to output TX freq carrier plus 30 then 40 and then return to carrier - now simply as an increment
 
                     LOAD      s0, 53'd
-                    OUTPUT       s0, Tone
+                    OUTPUT       s0, TXFreqLSB
 
 
                     CALL      delay_100ms
 
                     LOAD      s0, 35'd
-                    OUTPUT       s0, Tone
+                    OUTPUT       s0, TXFreqLSB
 
 
                     CALL      delay_100ms
 
                     LOAD      s0, 00
-                    OUTPUT       s0, Tone       ; and send value to SSB modulatorto reset to normal frequency
+                    OUTPUT       s0, TXFreqLSB       ; and send value to SSB modulatorto reset to normal frequency
 
 
                     LOAD      s0, 82'd              ; Un Block DSPpico
@@ -1341,13 +1393,13 @@ Warbleloop:         LOAD      s0, 66'd              ; Block DSPpico
 ; need to output TX freq carrier plus 30 then 40 and then return to carrier - now simply as an increment
 
                     LOAD      s0, 30'd
-                    OUTPUT       s0, Tone
+                    OUTPUT       s0, TXFreqLSB
 
 
                     CALL      delay_100ms
 
                     LOAD      s0, 40'd
-                    OUTPUT       s0, Tone
+                    OUTPUT       s0, TXFreqLSB
 
 
                     CALL      delay_100ms
@@ -1356,7 +1408,7 @@ Warbleloop:         LOAD      s0, 66'd              ; Block DSPpico
                     JUMP      NZ, Warbleloop
 
                     LOAD      s0, 00
-                    OUTPUT       s0, Tone       ; and send value to SSB modulatorto reset to normal frequency
+                    OUTPUT       s0, TXFreqLSB       ; and send value to SSB modulatorto reset to normal frequency
 
 
                     LOAD      s0, 82'd              ; Un Block DSPpico
@@ -1603,9 +1655,9 @@ Chars2Byte:         LOAD      s8, s6
                     RETURN       
 
 ; This routine takes an ascii code in s8 and returns a 4 bit value in s8
-Get4bits:           COMPARE      s8, 60'd              ; if character is 0-9 it is less than 60, if it is A-F then it is greater than 60
+Get4bits:           COMPARE      s8, 60              ; if character is 0-9 it is less than 60, if it is A-F then it is greater than 60
                     JUMP      C, char0_9
-                    SUB       s8, 55'd              ; assumes hex codes A-F are in capitals!!, A (code 65) gives 10...
+                    SUB       s8, 55              ; assumes hex codes A-F are in capitals!!, A (code 65) gives 10...
                     AND       s8, 0F             ; make sure only return 4 bits
                     RETURN       
 
@@ -1636,7 +1688,7 @@ GetChar:            SUB       s5, 10'd              ; Test if s5 greater than 9
                     ADD       s5, 65'd              ; offset for Ascii code 'A'
                     RETURN       
 is_0_9:             ADD       s5, 10'd              ; return to range 0-9
-                    ADD       s5, 48'd              ; offset to Ascii code for '0'
+                    ADD       s5, 48              ; offset to Ascii code for '0'
                     RETURN       
 
 

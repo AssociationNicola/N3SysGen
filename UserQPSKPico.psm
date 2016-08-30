@@ -1,6 +1,4 @@
-;GV08 lower audio volume control to about 0.8V (Prod7)
-;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
-;GV06 Increase output amplitude of SSB in DSPpico on TX
+;GV10
 ;GV05 Modified frequencies (MMCM and KeypadPico values) to work with 33.333MHz clock for production model (Apr 2012)
 ;GV04 Now using mic preamp so need to fix AGCs
 ;GV03 Mods to DSP to try and get volume load and saturate OutAmp properly
@@ -106,8 +104,7 @@
 ; Now for Godil Board
 ; Version for multi pico boot with shifted bit offsets on oport
 
-CONSTANT Versionno,			08               ; 1 July 2016
-CONSTANT InitialVolume,			133'd		;lowerred volume
+CONSTANT Versionno,			05               ; Apr 2016
 
 CONSTANT MinorVersionno,    EE                 ; Pete
 
@@ -290,8 +287,8 @@ CONSTANT Configure,				9'd
 CONSTANT RXFreqMSB,				10'd                  ; 769A for 88.956kHz ie 86.956kHz carrier and allow range up to 154kHz
 CONSTANT RXFreqLSB,				11'd
 
-CONSTANT AudioVolume,				12'd                  ; Initialy 141
-CONSTANT Tone,				13'd			; Carrier increment to cause a tone modulation on TX
+CONSTANT TXFreqMSB,				12'd                  ; 3710  with 49MHz clock
+CONSTANT TXFreqLSB,				13'd
 CONSTANT Acknowledge,			14'd
 ; offsets:
 CONSTANT DSPFifo,				16'd
@@ -363,6 +360,39 @@ GetByte:            INPUT        s0, Uart_status     ; Is there a byte available
                     JUMP      NZ, GetByte         ; until there is a byte in the input buffer!
                     INPUT        s1, Uart_rx
                     RETURN       
+; Program re-written from here
+; LOAD	  s0,0				  		 ;dummy
+; ProgDSP:
+
+; -------------Test of BT chip
+; 				    CALL      CheckUartRx
+; JUMP      NZ,noInput			 		  ;See if anything on input from serial port
+; 
+; INPUT        s5, Uart_rx         ; get character
+; 					CALL	  Byte2Chars
+; 
+; OUTPUT		  s6,BTFifo			  ;send MS4bits to BT pico
+; OUTPUT		  s7,BTFifo			  ;send LS4bits char to BT pico
+; 
+; 
+; 
+; noInput:			INPUT        s1, BTcmd      ; Get character from BT picoblaze (if present should be less than 128)
+; COMPARE      s1, 128             ; Is the fifo empty though? (if greater than 127) - could use routine like in DSPpico!
+; CALL      NC,ProgDSP	  	; If less than 128 there is a value to give back, otherwise re-start.
+; 
+; 
+; CALL      GetBTFifoChar
+; 				  LOAD      s6, s0              ; get character
+; 				  CALL      GetBTFifoChar
+; 				  LOAD      s7, s0              ; get character
+; 				  CALL		Chars2Byte
+; 				  LOAD		s6,s5	  			;prepare byte in s6 for next call..
+; CALL	  Send2UartTX		  ;Echo back to terminal	    		
+; 				
+; 				
+; 				    JUMP	  ProgDSP			  ;loop back
+
+; -----------------------------------
 
 
 cold_start:         LOAD      s0, 00               ; Note the label 'ProgDSP' is only to allow re-boot to work!
@@ -370,6 +400,7 @@ ProgDSP:
 
 ; need to clear scratchpad
 
+; ;;LOAD  s0, 0
                     LOAD      s1, 00
 ScratchClear: 
                     STORE     s0, (s1)              ; zero location
@@ -392,6 +423,16 @@ init:               LOAD      ScratchPointer, 00
                     STORE     s5, ADCGainTX       ; save initial value forTX
 
 ;Frequency of TX/RX now set by keypad pico
+;                    LOAD      s0, Bmode           ; 1			;start with beacon if mode =1 (should now work!)
+;                    STORE     s0, Mode            ; store setting for beacon mode
+
+;                    LOAD      s0, 05             ; for 31kHz    $0E
+ ;                   STORE     s0, TX_F_MSB        ; store value for 86.95kHz
+  ;                  OUTPUT       s0, TXFreqMSB
+
+;                    LOAD      s0, 2B             ; $7E for N2 and $80 for Heyphone
+ ;                   STORE     s0, TX_F_LSB
+  ;                  OUTPUT       s0, TXFreqLSB       ; and send value to SSB modulator
 
                     LOAD      s0, AGCupperRX
                     STORE     s0, ADCAGCUpperThreshold
@@ -405,10 +446,9 @@ init:               LOAD      ScratchPointer, 00
 
                     LOAD      s1, 00
                     CALL      ArchiveSource
-                    CALL      EnableArchive	
+                    CALL      EnableArchive
 
-		LOAD s0,InitialVolume			;set lowish audio volume
-		OUTPUT s0,AudioVolume
+
 
                     CALL      delay_100ms
 
@@ -1315,19 +1355,19 @@ Twotone:            LOAD      s0, 66'd              ; Block DSPpico
 ; need to output TX freq carrier plus 30 then 40 and then return to carrier - now simply as an increment
 
                     LOAD      s0, 53'd
-                    OUTPUT       s0, Tone
+                    OUTPUT       s0, TXFreqLSB
 
 
                     CALL      delay_100ms
 
                     LOAD      s0, 35'd
-                    OUTPUT       s0, Tone
+                    OUTPUT       s0, TXFreqLSB
 
 
                     CALL      delay_100ms
 
                     LOAD      s0, 00
-                    OUTPUT       s0, Tone       ; and send value to SSB modulatorto reset to normal frequency
+                    OUTPUT       s0, TXFreqLSB       ; and send value to SSB modulatorto reset to normal frequency
 
 
                     LOAD      s0, 82'd              ; Un Block DSPpico
@@ -1341,13 +1381,13 @@ Warbleloop:         LOAD      s0, 66'd              ; Block DSPpico
 ; need to output TX freq carrier plus 30 then 40 and then return to carrier - now simply as an increment
 
                     LOAD      s0, 30'd
-                    OUTPUT       s0, Tone
+                    OUTPUT       s0, TXFreqLSB
 
 
                     CALL      delay_100ms
 
                     LOAD      s0, 40'd
-                    OUTPUT       s0, Tone
+                    OUTPUT       s0, TXFreqLSB
 
 
                     CALL      delay_100ms
@@ -1356,7 +1396,7 @@ Warbleloop:         LOAD      s0, 66'd              ; Block DSPpico
                     JUMP      NZ, Warbleloop
 
                     LOAD      s0, 00
-                    OUTPUT       s0, Tone       ; and send value to SSB modulatorto reset to normal frequency
+                    OUTPUT       s0, TXFreqLSB       ; and send value to SSB modulatorto reset to normal frequency
 
 
                     LOAD      s0, 82'd              ; Un Block DSPpico

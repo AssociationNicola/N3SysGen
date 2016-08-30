@@ -1,10 +1,3 @@
-;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
-;GV06 increase SSB amplitude on TX
-;GV03 corrected OutAmp doubling and increased speaker volume
-;GV02 Halved AGC thresholds to avoid clipping
-;GV01 Reduce Speaker volume by increasing AGC value to 63 on startup
-;GV00 return counter to zero for new Zynq design
-;GVA5 for TE0722, with RX/TX frequencies adjusted for 32.768MHz (mod in Keypad assembler)
 ;GVA4 correct bad setting of AvesignalMSB instead of USB (caused crashing)
 ;GVA2 BT input from mic is taken externally in logic - also removed audio double so as not to saturate voice on transmission (but will drop volume on handset ~6dB)
 ;AND over haul AGC to use 24 bit average level registering so level is monitored with AveSignalUSB
@@ -55,15 +48,15 @@
 
 
 
-CONSTANT	AGClowthreshold,		3'd   			;;These are thresholds for the measured signal
-CONSTANT	AGClowthreshold2,		1'd   			;;These are thresholds for the measured signal
-CONSTANT	AGCInitial,		4'd   			;;This is mid way between thresholds
+CONSTANT	AGClowthreshold,		6'd   			;;These are thresholds for the measured signal
+CONSTANT	AGClowthreshold2,		3'd   			;;These are thresholds for the measured signal
+CONSTANT	AGCInitial,		8'd   			;;This is mid way between thresholds
 
-CONSTANT	AGCuppthreshold,		5'd
-CONSTANT	AGCuppthreshold2,		8'd			;3dB above first threshold
-CONSTANT	AGCuppthreshold4,		11'd
+CONSTANT	AGCuppthreshold,		10'd
+CONSTANT	AGCuppthreshold2,		15'd			;3dB above first threshold
+CONSTANT	AGCuppthreshold4,		22'd
 
-CONSTANT    delay_1us_constant,       06                  ; Value (13)19 or 12? decimal suitable for 50MHz clock – about 6 for 33MHz?
+CONSTANT	delay_1us_constant,	  	12'd                  ; Value (13)19 or 12? decimal suitable for 50MHz clock – about 8 for 20MHz
 CONSTANT	m,						8'd                   ; No. of iterations for cordic
 CONSTANT	m_plus_1,				9'd                   ; No. of iterations for cordic
 CONSTANT	count_1000_lsb,			E8                 	  ; lower 8-bits of 1000 count value
@@ -132,7 +125,7 @@ CONSTANT	BTaudioMSB,		6'd                   ; Input from headset micro
 CONSTANT	BTaudioLSB,		7'd                   ; 
 CONSTANT	RAMdataMSB,		8'd					  ;Data from variable storage RAM
 CONSTANT	RAMdataLSB,		9'd
-CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone, bit 2 is TX_high
+CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone.
 
 
 
@@ -174,8 +167,6 @@ CONSTANT	StopToneALong,		24'd
 CONSTANT	StopToneB,			25'd
 CONSTANT	StopToneBLong,		26'd
 
-CONSTANT	MSBBTAudio,			27'd
-CONSTANT	LSBBTAudio,			28'd
 
 
 ; Scratchpad registers
@@ -302,19 +293,18 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
                     STORE     s0, 08
                     
                     LOAD	  s0,16'd
-                    STORE	  s0,AGCvalueTX		
-                    LOAD	  s0,63'd
-                    STORE	  s0,AGCvalueRX		;set to low value for RX
+                    STORE	  s0,AGCvalueTX
+                    STORE	  s0,AGCvalueRX
 
 
-; LOAD      s1, 30'd
+; LOAD      s1, 30
 ; LOAD      s0, 0
 ; diracload:          STORE     s0, s1
 ; ADD       s1, 1
-; COMP      s1, 69'd
+; COMP      s1, 69
 ; JUMP      NZ, diracload
-; LOAD      s0, 75'd
-; STORE     s0, 69'd
+; LOAD      s0, 75
+; STORE     s0, 69
 
 
 ;Sinewave table: Step through this 1 in 8 loops to give 62.5Hz sinewave on transmission
@@ -388,7 +378,7 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
 ; Initialise AGC
                     LOAD      s0, 255'd             ; - 1
                     STORE     s0, VolSetting
-                    LOAD	  s0,63'd				  ;Start with hig attenuation (max 63) value for external AGC MUX version
+                    LOAD	  s0,32'd				  ;Start with mid value for external AGC MUX version
                     STORE     s0, AGCvalue		  ;maybe start with 16 (was 8)?
                     LOAD      AveSignalUSB, AGCInitial   ; set signal averager to moderate level
 ;                    LOAD      AveSignalUSB, AGClowthreshold       ; set signal averager to moderate level
@@ -429,9 +419,9 @@ AwaitRise:          INPUT     s0, Strobe
 ;					OUTPUT     s2,Data2archiveMSB
   	   			 		
 ;                    ADD       SineCtr, audioTest
- ;                   COMP      SineCtr, 50'd         ; should be 50 with sine wave - extend to 70 for dirac!
+ ;                   COMP      SineCtr, 50         ; should be 50 with sine wave - extend to 70 for dirac!
   ;                  JUMP      C, contsine         ; skip over if still below 50
-   ;                 SUB      SineCtr, 20'd  ; reset counter back to start (1 period)
+   ;                 SUB      SineCtr, 20  ; reset counter back to start (1 period)
    					 
 ;contsine:           FETCH     s1, SineCtr         ; put value of sine from table into AudioMSB
  ;                   LOAD      s2, 0
@@ -503,25 +493,15 @@ AwaitRise:          INPUT     s0, Strobe
 ;	                    OUT       s3, CmdToUser	  	;Send receive signal in 7 bits (divide by 2!) to user pico to send to UART
 ;__________________________________
 
- 
+ 							CALL	AudioDouble		   ;increase volume 12 dB! Add 2 of these 26/2/15
+ 							CALL	AudioDouble		   ;increase volume 12 dB!
+
  
 		 				    OUTPUT    s1, MSBAudio	   
-          					    OUTPUT    s0, LSBAudio
-
- 						CALL	AudioDouble		   ;increase volume 6 dB! Add 2 of these 26/2/15
-
-
- 						CALL	AudioDouble		   ;increase volume 12 dB! Add may 16
- 						CALL	AudioDouble		   ;increase volume 12 dB! 
-
-;						AND	s0, f8			;Make bottom 3 bits zero in case is 13 bit linear and these are attenuation bits
-						    OUTPUT    s1, MSBBTAudio	   
-          					    OUTPUT    s0, LSBBTAudio
-
-
+        					OUTPUT    s0, LSBAudio
 ;Display demodulated values only in receive
-							OUTPUT  s1,Data2archiveMSB 	  	  		  ;This is received demodulated data
-							OUTPUT  s0,Data2archiveLSB
+							OUTPUT  s0,Data2archiveMSB 	  	  		  ;This is received demodulated data
+							OUTPUT  s1,Data2archiveLSB
 							SLA		s0				  ;shift top bit into carry
 							ADDCY	s1,00			  ;s1 now rounded value of upper 8 bits (but s0 wasted!)
 					
@@ -555,19 +535,6 @@ BackfromTransmitting: 	INPUT   s0, Command         ; Check if FIFO character pre
 ;Need to overhaul this !! Oct2015
 ;So do this bit at 8kHz rate - so has about a 1s time constant
 ; Add 1/32 x abs(new normalised value - which is 256 times smaller than averaged value)
-
-
-
-				INPUT 	s2,Status
-				AND	s2,06	 ;look at bit 1 and 2
-					
-;In this version switching to BT input is through external multiplexer to go through emphasis filter
-				COMPARE s2,04	 ;True if BT signal present and TX_high
-					
-				JUMP  Z,    AwaitAudioVal  ;Don't do anything if on BT and TX_high
-
-
-
                     FETCH      s3, NormalisedMagMSB
                     FETCH      s2, NormalisedMagLSB		  ;These are absolute values
 
@@ -1040,8 +1007,8 @@ SkipNoBT:
 				CALL      PerformFIR
 				;This should have decreased amplitude by about 6dB	
 				
-				OUTPUT     s1,Data2archiveMSB 		
-				OUTPUT     s0,Data2archiveLSB
+				OUTPUT     s0,Data2archiveMSB 		
+				OUTPUT     s1,Data2archiveLSB
 				
 
 
@@ -1049,14 +1016,21 @@ SkipNoBT:
 ;need to make sure that s3/s2 and s1/s0 DO NOT EXCEED $3000, ie 48 in the MSBs!
 				   CALL	  cordic		  ;This is upsettng the AGC when sinectr used sB!
 
-					CALL TryAndDouble	;Bump amplitude to saturate! (Jan 2016)
-					CALL TryAndDouble
-					CALL TryAndDouble
-					CALL TryAndDouble
-					CALL TryAndDouble	;try add for upgrade of production code
-					
-					
-								   		   	
+
+				   SL0	  s0			  ;add 6dB 4/10/11
+				   SLA	  s1
+				   COMPARE	  s1,64'd	  ;see if it is not too big already
+				   JUMP	  NC,BiggerThan63	  ;Skip if too big
+				   SL0	  s0			  ;add 6dB 4/10/11
+				   SLA	  s1
+;added further 6dB Aug 2013
+	   		   	   COMPARE	  s1,64'd	  ;see if it is not too big already
+				   JUMP	  NC,BiggerThan63	  ;Skip if too big
+				   SL0	  s0			  ;add 6dB 4/10/11
+				   SLA	  s1
+
+
+				   		   	
 OutAmp:		
 
 ;_______________________________
@@ -1097,21 +1071,14 @@ OutAmp:
 								
 				   JUMP      BackfromTransmitting
 
-TryAndDouble:	   COMPARE	  s1,64'd	  ;see if it is not too big already
-				   JUMP	  NC,BiggerThan63	  ;Skip if too big
-				   SL0	  s0			  ;add 6dB 4/10/11
-				   SLA	  s1
-					RETURN
-				   
-				   
 BiggerThan63:	   COMPARE s1,129'd
 				   JUMP NC,BiggerThan128
 				   ADD	s1,64'd
-				   RETURN
+				   JUMP	OutAmp
 				   
 BiggerThan128:	   SR0	s1			;half value (127 max value)
 				   ADD	s1,128'd		;add 128 (gives 255 max)
-				   RETURN
+				   JUMP	OutAmp
 				
 
 ;Enter with signed 16 bit value in s1,s0 and return magnitude in s3,s2
@@ -1215,24 +1182,16 @@ decreaseAGC2: 	   CALL decreaseAGC
 
 
 
-; AGC takes 16 bit value, MSB in s1, LSB in s0 and returns normalised 16 bit value in s1,s0 using AGC value from s3, using external MUX for coarse control
+; AGC takes 24 bit value, MSB in s2, LSB in s0 and returns normalised 16 bit value in s1,s0 using AGC value from s3
 ;AGC value in s3 should vary  0-63 in this version - higher value is higher attenuation so use higher significant bits on input MUX (4 bits - 16 inputs)
 ; This routine can also be use for the volume setting if value put in s3 ????????
-AGC:   				INPUT 	s2,Status
-				AND	s2,06	 ;look at bit 1 and 2
-					
-;In this version switching to BT input is through external multiplexer to go through emphasis filter
-				COMPARE s2,04	 ;True if BT signal present and TX_high
-					
-				RETURN Z   ;Don't do anything if on BT and TX_high
-	   	   	
-				SRX		  s3   	 			  ;divide s3 by 2 to get last AGC and put last bit into carry
-				CALL	  C,decrease1_5dB		  ;if last bit set then reduce by 3dB
-				SRX		  s3   	 			  ;divide s3 by 2 to get old AGC and put last bit into carry
-				CALL	  C,decrease3dB		  ;if last bit set then reduce by 3dB
+AGC:   		   	   	SRX		  s3   	 			  ;divide s3 by 2 to get last AGC and put last bit into carry
+					CALL	  C,decrease1_5dB		  ;if last bit set then reduce by 3dB
+					SRX		  s3   	 			  ;divide s3 by 2 to get old AGC and put last bit into carry
+					CALL	  C,decrease3dB		  ;if last bit set then reduce by 3dB
 
-	   		   	OUTPUT		  s3,MUXport		  ;Now simply use remaining 4 bits to drive the MUX
-	   		   	RETURN
+	   		   	    OUTPUT		  s3,MUXport		  ;Now simply use remaining 4 bits to drive the MUX
+	   		   	    RETURN
                     
 ;AGCloop:            COMPARE      s3, 00
  ;                   RETURN       Z                   ; escape if AGC value zero

@@ -204,8 +204,6 @@ loop:				INPUT     s0, Command		  ;Check if FIFO character present
 ;think touch is not pressed
 NotTouchDown:		CALL	  delay_100ms
 					INPUT	  s1,PTT
-			AND		  s1,01		;Mask lowest bit
-                    
                     COMPARE	  s1,00			;check if pressed logic on proto2 is inverted
                     JUMP	  Z,loop		;so is in fact pressed so escape
                     LOAD	  cursor_position,04	;position cursor just after 'Nicola 3'
@@ -219,8 +217,6 @@ NotTouchDown:		CALL	  delay_100ms
 ;believe touch to be pressed
 TouchDown:			CALL	  delay_100ms
 					INPUT	  s1,PTT
-			AND		  s1,01		;Mask lowest bit
-                    
                     COMPARE	  s1,00			;logic on proto2 is inverted
                     JUMP	  NZ,loop		;so is not in fact pressed - escape
 					LOAD	  cursor_position,04	;position cursor just after 'Nicola 3'
@@ -436,6 +432,17 @@ Displays5:				CALL	  Byte2Chars
 					RETURN			
 
 
+;initialise scratchpad values for touch levels
+;GetTouchLevels:		  	LOAD	  s0,00			  	;!!!!!!!!!!!!!! 1 for touch down, 0 for up - changed to up 23/6/11 only worry about touch down for the moment! (This is the touch nearest the middle of the lid)
+;					OUTPUT    s0,ChooseTouchKey	 ;Select which pad to read
+;					INPUT     s6,PTT
+;					CALL	  delay_100ms
+;					INPUT	  s1,PTT
+;					ADD		  s1,s6
+;					SRA		  s1   			;Devide by 2 taking ito account carry so average 2 values
+;					SUB		  s1,20			;set threshold at a lower value (assuming doesn't wrap around!!) -or add???????
+;					STORE	  s1,TouchDownLevel
+;					RETURN
 					
 
 
