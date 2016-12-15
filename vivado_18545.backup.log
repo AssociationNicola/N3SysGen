@@ -1,0 +1,30 @@
+#-----------------------------------------------------------
+# Vivado v2016.2 (64-bit)
+# SW Build 1577090 on Thu Jun  2 16:32:35 MDT 2016
+# IP Build 1577682 on Fri Jun  3 12:00:54 MDT 2016
+# Start of session at: Fri Dec  2 08:28:57 2016
+# Process ID: 18545
+# Current directory: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen
+# Command line: vivado
+# Log file: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen/vivado.log
+# Journal file: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen/vivado.jou
+#-----------------------------------------------------------
+start_gui
+open_project /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.xpr
+Scanning sources...
+Finished scanning sources
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/graham/Dropbox/SysgenOutput/TE0722/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/graham/Dropbox/SysgenOutput/TE0722/ToneDetect/ip'.
+INFO: [Common 17-41] Interrupt caught. Command should exit soon.
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/Xilinx16/Vivado/2016.2/data/ip'.
+****** Webtalk v2016.2 (64-bit)
+  **** SW Build 1577090 on Thu Jun  2 16:32:35 MDT 2016
+  **** IP Build 1577682 on Fri Jun  3 12:00:54 MDT 2016
+    ** Copyright 1986-2016 Xilinx, Inc. All Rights Reserved.
+
+source /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.hw/webtalk/labtool_webtalk.tcl -notrace
+INFO: [Common 17-206] Exiting Webtalk at Fri Dec  2 08:30:28 2016...
+INFO: [Common 17-344] 'open_project' was cancelled
+exit
+INFO: [Common 17-206] Exiting Vivado at Fri Dec  2 08:32:37 2016...

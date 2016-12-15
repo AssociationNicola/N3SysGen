@@ -5,7 +5,8 @@ cd ../N3SysGen/
   423  git add USERpico.psm
   424  git add UserPico.psm
   425  git add BTpico.psm
-  426  git add KeyPadPico.psm 
+  426  git add KeyPadPico.psm
+git add ToneDetectpico.psm 
 git add -A . (within a directory will add all the contents of the directory and subdirectories)
   427  git commit -m "***comments*** "
 

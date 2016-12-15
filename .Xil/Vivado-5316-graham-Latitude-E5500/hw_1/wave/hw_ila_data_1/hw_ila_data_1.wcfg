@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<wave_config>
+	<wave_state>
+	</wave_state>
+	<db_ref_list>
+		<db_ref path="/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen/.Xil/Vivado-5316-graham-Latitude-E5500/hw_1/wave/hw_ila_data_1/hw_ila_data_1.wdb" id="1" type="auto">
+			<top_modules>
+				<top_module name="top">
+				</top_module>
+			</top_modules>
+		</db_ref>
+	</db_ref_list>
+	<WVObjectSize size="12">
+	</WVObjectSize>
+	<wvobject fp_name="PS_PL_i/datacounter" type="array" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="PS_PL_i/n3z_tonetest_0_stream_tdata" type="array" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="PS_PL_i/n3z_tonetest_0_pl2ps_tdata" type="array" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="PS_PL_i/axi_fifo_mm_s_1_axi_str_txd_tdata" type="array" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="u_ila_0_axi_fifo_mm_s_0_axi_str_rxd_tready" type="logic" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="u_ila_0_axi_fifo_mm_s_1_axi_str_rxd_tready" type="logic" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="PS_PL_i/axi_fifo_mm_s_1_axi_str_txd_tvalid" type="logic" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="PS_PL_i/n3z_tonetest_0_pl2ps_tlast" type="logic" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="PS_PL_i/n3z_tonetest_0_pl2ps_tvalid" type="logic" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="lopt" type="logic" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="PS_PL_i/n3z_tonetest_0_stream_tlast" type="logic" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+	<wvobject fp_name="PS_PL_i/n3z_tonetest_0_stream_tvalid" type="logic" db_ref_id="1">
+		<obj_property name="Radix">HEXRADIX</obj_property>
+	</wvobject>
+</wave_config>
+

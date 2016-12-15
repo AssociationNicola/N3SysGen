@@ -1,21 +1,21 @@
 --------------------------------- Version Log ----------------------------------
 Version                                 Path
-System Generator 2014.4                 /opt/Xilinx/Vivado/2014.4
+System Generator 2016.2                 /opt/Xilinx16/Vivado/2016.2
 Matlab 8.4.0.150421 (R2014b)            /usr/local/MATLAB/R2014b
-Vivado 2014.4                           /opt/Xilinx/Vivado/2014.4
+Vivado 2016.2                           /opt/Xilinx16/Vivado/2016.2
 --------------------------------------------------------------------------------
 Summary of Errors:
 Error 0001: Illegal type on port: en
-     Block: 'untitled/ConstantDetect/Counter'
+     Block: 'untitled/Counter6'
 --------------------------------------------------------------------------------
 
 Error 0001:
 
 Reported by:
-  'untitled/ConstantDetect/Counter'
+  'untitled/Counter6'
 
 Details:
-The en port has data type UFix_1_0.
+The en port has data type Fix_16_14.
 The en port must be a boolean signal.
 
 Error occurred during "Rate and Type Error Checking".

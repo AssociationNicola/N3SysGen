@@ -1,0 +1,109 @@
+#-----------------------------------------------------------
+# Vivado v2016.2 (64-bit)
+# SW Build 1577090 on Thu Jun  2 16:32:35 MDT 2016
+# IP Build 1577682 on Fri Jun  3 12:00:54 MDT 2016
+# Start of session at: Sat Dec  3 15:06:15 2016
+# Process ID: 5316
+# Current directory: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen
+# Command line: vivado
+# Log file: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen/vivado.log
+# Journal file: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen/vivado.jou
+#-----------------------------------------------------------
+start_gui
+open_project /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.xpr
+Scanning sources...
+Finished scanning sources
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/graham/Dropbox/SysgenOutput/TE0722/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/graham/Dropbox/SysgenOutput/TE0722/ToneDetect/ip'.
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/Xilinx16/Vivado/2016.2/data/ip'.
+INFO: [Common 17-41] Interrupt caught. Command should exit soon.
+****** Webtalk v2016.2 (64-bit)
+  **** SW Build 1577090 on Thu Jun  2 16:32:35 MDT 2016
+  **** IP Build 1577682 on Fri Jun  3 12:00:54 MDT 2016
+    ** Copyright 1986-2016 Xilinx, Inc. All Rights Reserved.
+
+source /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.hw/webtalk/labtool_webtalk.tcl -notrace
+INFO: [Common 17-206] Exiting Webtalk at Sat Dec  3 15:09:45 2016...
+INFO: [Common 17-344] 'open_project' was cancelled
+open_project /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.xpr
+Scanning sources...
+Finished scanning sources
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/graham/Dropbox/SysgenOutput/TE0722/ip'.
+INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/graham/Dropbox/SysgenOutput/TE0722/ToneDetect/ip'.
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/Xilinx16/Vivado/2016.2/data/ip'.
+open_project: Time (s): cpu = 00:00:31 ; elapsed = 00:00:32 . Memory (MB): peak = 5968.355 ; gain = 123.469 ; free physical = 313 ; free virtual = 2068
+update_compile_order -fileset sources_1
+launch_sdk -workspace /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk -hwspec /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk/PS_PL_wrapper.hdf
+INFO: [Vivado 12-393] Launching SDK...
+INFO: [Vivado 12-417] Running xsdk -workspace /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk -hwspec /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk/PS_PL_wrapper.hdf
+INFO: [Vivado 12-3157] SDK launch initiated. Please check console for any further messages.
+close_project
+open_hw
+INFO: [IP_Flow 19-234] Refreshing IP repositories
+INFO: [IP_Flow 19-1704] No user IP repositories specified
+INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/Xilinx16/Vivado/2016.2/data/ip'.
+open_hw: Time (s): cpu = 00:00:04 ; elapsed = 00:00:06 . Memory (MB): peak = 6001.031 ; gain = 16.008 ; free physical = 145 ; free virtual = 1678
+connect_hw_server
+INFO: [Labtools 27-2285] Connecting to hw_server url TCP:localhost:3121
+INFO: [Labtools 27-2222] Launching hw_server...
+INFO: [Labtools 27-2221] Launch Output:
+
+****** Xilinx hw_server v2016.2
+  **** Build date : Jun  2 2016-16:54:00
+    ** Copyright 1986-2016 Xilinx, Inc. All Rights Reserved.
+
+
+open_hw_target
+INFO: [Labtoolstcl 44-466] Opening hw_target localhost:3121/xilinx_tcf/Digilent/210249A0CF17
+open_hw_target: Time (s): cpu = 00:00:01 ; elapsed = 00:00:11 . Memory (MB): peak = 6011.191 ; gain = 0.031 ; free physical = 136 ; free virtual = 1646
+current_hw_device [lindex [get_hw_devices] 1]
+refresh_hw_device -update_hw_probes false [lindex [get_hw_devices] 1]
+INFO: [Labtools 27-1434] Device xc7z010 (JTAG device index = 1) is programmed with a design that has no supported debug core(s) in it.
+WARNING: [Labtools 27-3123] The debug hub core was not detected at User Scan Chain 1 or 3.
+Resolution: 
+1. Make sure the clock connected to the debug hub (dbg_hub) core is a free running clock and is active OR
+2. Manually launch hw_server with -e "set xsdb-user-bscan <C_USER_SCAN_CHAIN scan_chain_number>" to detect the debug hub at User Scan Chain of 2 or 4. To determine the user scan chain setting, open the implemented design and use: get_property C_USER_SCAN_CHAIN [get_debug_cores dbg_hub].
+refresh_hw_device [lindex [get_hw_devices] 1]
+INFO: [Labtools 27-1434] Device xc7z010 (JTAG device index = 1) is programmed with a design that has no supported debug core(s) in it.
+WARNING: [Labtools 27-3123] The debug hub core was not detected at User Scan Chain 1 or 3.
+Resolution: 
+1. Make sure the clock connected to the debug hub (dbg_hub) core is a free running clock and is active OR
+2. Manually launch hw_server with -e "set xsdb-user-bscan <C_USER_SCAN_CHAIN scan_chain_number>" to detect the debug hub at User Scan Chain of 2 or 4. To determine the user scan chain setting, open the implemented design and use: get_property C_USER_SCAN_CHAIN [get_debug_cores dbg_hub].
+set_property PROBES.FILE {/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.runs/impl_1/debug_nets.ltx} [lindex [get_hw_devices] 1]
+set_property PROGRAM.FILE {/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.runs/impl_1/PS_PL_wrapper.bit} [lindex [get_hw_devices] 1]
+program_hw_devices [lindex [get_hw_devices] 1]
+INFO: [Labtools 27-3164] End of startup status: HIGH
+refresh_hw_device [lindex [get_hw_devices] 1]
+INFO: [Labtools 27-2302] Device xc7z010 (JTAG device index = 1) is programmed with a design that has 1 ILA core(s).
+refresh_hw_device: Time (s): cpu = 00:00:09 ; elapsed = 00:00:15 . Memory (MB): peak = 6052.996 ; gain = 19.016 ; free physical = 135 ; free virtual = 1515
+display_hw_ila_data [ get_hw_ila_data hw_ila_data_1 -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+display_hw_ila_data: Time (s): cpu = 00:00:03 ; elapsed = 00:00:10 . Memory (MB): peak = 6059.824 ; gain = 6.828 ; free physical = 99 ; free virtual = 1495
+set_property CONTROL.CAPTURE_MODE BASIC [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+set_property CONTROL.TRIGGER_POSITION 500 [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+set_property TRIGGER_COMPARE_VALUE eq1'b1 [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tlast -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+run_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+INFO: [Labtools 27-1964] The ILA core 'hw_ila_1' trigger was armed at 2016-Dec-03 15:17:36
+wait_on_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+display_hw_ila_data [upload_hw_ila_data [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+INFO: [Labtools 27-1966] The ILA core 'hw_ila_1' triggered at 2016-Dec-03 15:17:44
+set_property TRIGGER_COMPARE_VALUE eq1'bX [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tlast -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+set_property TRIGGER_COMPARE_VALUE eq1'b1 [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tvalid -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+run_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+INFO: [Labtools 27-1964] The ILA core 'hw_ila_1' trigger was armed at 2016-Dec-03 16:26:45
+wait_on_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+display_hw_ila_data [upload_hw_ila_data [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+INFO: [Labtools 27-1966] The ILA core 'hw_ila_1' triggered at 2016-Dec-03 16:26:54
+run_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+INFO: [Labtools 27-1964] The ILA core 'hw_ila_1' trigger was armed at 2016-Dec-03 16:31:00
+wait_on_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+display_hw_ila_data [upload_hw_ila_data [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+INFO: [Labtools 27-1966] The ILA core 'hw_ila_1' triggered at 2016-Dec-03 16:31:11
+set_property TRIGGER_COMPARE_VALUE eq1'bX [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tvalid -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+set_property TRIGGER_COMPARE_VALUE eq1'b1 [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tlast -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+run_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+INFO: [Labtools 27-1964] The ILA core 'hw_ila_1' trigger was armed at 2016-Dec-03 16:44:29
+wait_on_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+display_hw_ila_data [upload_hw_ila_data [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+INFO: [Labtools 27-1966] The ILA core 'hw_ila_1' triggered at 2016-Dec-03 16:44:36

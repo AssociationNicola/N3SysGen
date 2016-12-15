@@ -11,6 +11,8 @@ CONSTANT	count_1000_lsb,			E8                 	  ; lower 8-bits of 1000 count va
 CONSTANT	count_1000_msb,			03                    ; upper 8-bits of 1000 count value
 CONSTANT	half_pi_LSB,			00                     ; 
 CONSTANT	half_pi_MSB,		 	40                    ; 360 degrees = $10000
+CONSTANT	phase_threshold,		30'd			;test for phase fairly constant
+CONSTANT	count_value_to_trig,		08'd			;if low phase 8 succesive times, then this is significant!
 
 
 ;not sure about these (Aug2016)
@@ -41,9 +43,8 @@ NAMEREG		sE, TempScratchPointer
 CONSTANT	AudioMSB,		0'd		;Not used?
 CONSTANT	AudioLSB,		1'd
 CONSTANT	Strobe,			2'd                   ; 	   bit0=8kHz square wave - the rest are now zeros
-CONSTANT	Not used,		3'd                   ; TBD
-CONSTANT	DemodMSB,		4'd                   ; Top significant byte of multiplier output
-CONSTANT	DemodLSB,		5'd                   ; (only 16 bits retained)
+CONSTANT	DemodMSB,		3'd                   ; Top significant byte of multiplier output
+CONSTANT	DemodLSB,		4'd                   ; (only 16 bits retained)
 
 CONSTANT	Status,			6'd				  ;TBdefined
 CONSTANT	TBD,			7'd				  ;TBdefined
@@ -52,9 +53,10 @@ CONSTANT	TBD,			7'd				  ;TBdefined
 
 ; Output ports
 
-CONSTANT	CMD2USER,		0'd
+CONSTANT	CmdToUser,		0'd
 CONSTANT	LOMSB,			1'd
-CONSTANT	LOLSB,			2'd
+CONSTANT	BRAMaddrMSB,		2'd
+CONSTANT	BRAMaddrLSB,		3'd
 
 
 
@@ -72,7 +74,7 @@ CONSTANT	STRTAAccuDemodIMSB,	13'd	;This is the 16 bit value returned from the mu
 CONSTANT	STRTAAccuDemodILSB,	14'd	;Will this byte be used?
 CONSTANT	STRTAAccuDemodQMSB,	15'd	;This is th e 16 bit value of the demod component accumulated
 CONSTANT	STRTAAccuDemodQLSB,	16'd
-CONSTANT	STRTApreviousPhase	17'd	;8 bit value of the previous phase determined by the cordic
+CONSTANT	STRTApreviousPhase,	17'd	;8 bit value of the previous phase determined by the cordic
 CONSTANT	STRTAcounter,	18'd		;Counter to determine number of succesive 8ms periods that delta phase is less than phasethreshold (reset to zero if not)	
 
 CONSTANT	STRTBinc,	20'd
@@ -81,6 +83,8 @@ CONSTANT	STPAinc,	30'd
 
 CONSTANT	STPBinc,	40'd
 ;uses up to Scratch register 49'd
+
+CONSTANT	SampleCounterMSB, 50'd		;So as to have a 16 bit sample counter
 
 
 
@@ -128,23 +132,36 @@ AwaitRise:          INPUT     s0, Strobe
                     JUMP      Z, AwaitRise        ; if 0 still, wait a bit more...
 
 
+		OUTPUT	SampleCounter,BRAMaddrLSB	;send to BRAM address and initiate write
 
- 					
- 		ADD  SampleCounter,1	;increment counter		
+ 		FETCH s0,SampleCounterMSB
+					
+ 		ADD  SampleCounter,01	;increment counter
+		ADDCY   s0,00
+		STORE s0,SampleCounterMSB	;increment MSB
+		OUTPUT	s0,BRAMaddrMSB	;And send to BRAM address ready for LSB to be sent and initiate write
+				
  ;start treating StrtToneA
-		LOAD s0,STRTAinc
-		LOAD s1,0	(counter value when mature)
-		CALL DemodulateTone
-
-;now check if the accumulation has matured and then do cordic
+StartDemod:	LOAD s0,STRTAinc
+		LOAD s1,00	;(counter value when mature)
+		CALL DemodulateTone  ;and checks if the accumulation has matured (from s1) and if so do cordic
 			
 
 
  ;start treating StrtToneB
+		LOAD s0,STRTBinc
+		LOAD s1,16	;(counter value when mature)
+		CALL DemodulateTone
 
  ;start treating StpToneA
+		LOAD s0,STPAinc
+		LOAD s1,32	;(counter value when mature)
+		CALL DemodulateTone
 
  ;start treating StpToneB
+		LOAD s0,STPBinc
+		LOAD s1,48	;(counter value when mature)
+		CALL DemodulateTone
 
 
 
@@ -157,53 +174,60 @@ AwaitRise:          INPUT     s0, Strobe
 ;Enter with mature index in s1 (0-63 to stagger output to the UART) and the scratch base address to treat in s0 - this is the scratch
 ;address for the toneinc
 
-DemodulateTone:		FETCH s2,s0	;Tone increment (pointed to in scratch by s0, to increment through sine wave LUT)
+DemodulateTone:		FETCH s2,(s0)	;Tone increment (pointed to in scratch by s0, to increment through sine wave LUT)
 			LOAD s3,00
-;Need to right shift into s3 to scale correctly
+;Need to right shift into s3 to scale correctly (as they are 4 times too big)
 			SRX  s2
 			SRA  s3		;and carry containing lowest bit
 			SRX  s2
 			SRA  s3		;and carry containing lowest bit (doing this twice limits highest frequency to about 2kHz)
 			
 			ADD  s0,01
-			FETCH s4,s0	;MSB of LUTptr
+			FETCH s4,(s0)	;MSB of LUTptr
 			ADD  s0,01
-			FETCH s5,s0	;LSB of LUTptr
+			FETCH s5,(s0)	;LSB of LUTptr
 			ADD  s5,s3	;increment LUTptr
-			ADDC s4,s2	;increment LUTptr
-			STORE s5,s0	;update LSB LUTptr
+			ADDCY s4,s2	;increment LUTptr
+			STORE s5,(s0)	;update LSB LUTptr
 			SUB s0,01	;decrement scratch pointer s0
-			STORE s4,s0	;update MSB LUTptr
-			OUTPUT s4,LOMSB
-			OUTPUT s5,LOLSB ;Send next sinewave address to LUT - use write of LSB to delay trigger latch of multiplier
+			STORE s4,(s0)	;update MSB LUTptr
+;	        		OUTPUT s5,LOLSB ;Send next sinewave address to LUT 
+			OUTPUT s4,LOMSB	;Actually only need to output MSB  - use write of MSB to delay trigger latch of multiplier
+			
+NEED To wait for multiplication otherwise cordic will be out of step
+
+
 			INPUT	s2,DemodMSB	;input previous LO tone multiplied by the signal (for accumulation)
 			INPUT	s3,DemodLSB
 			ADD s0,02	;move back up to scratch pointer location for MSB of I accumulating signal (of previous tone!)
-			FETCH s6,s0	;MSB of Accumulated I demod value
+			FETCH s6,(s0)	;MSB of Accumulated I demod value
 			ADD  s0,01
-			FETCH s7,s0	;LSB of Accumulated I demod value (base + 4)
+			FETCH s7,(s0)	;LSB of Accumulated I demod value (base + 4)
 			ADD  s7,s3	;signed accumulate into Accumulated value
-			ADDC s6,s2	;accumulate into Accumulated value
-			STORE s7,s0	;update LSB Accumulated value
+			ADDCY s6,s2	;accumulate into Accumulated value
+			STORE s7,(s0)	;update LSB Accumulated value
 			SUB s0,01	;decrement scratch pointer s0
-			STORE s6,s0	;update MSB Accumulated value
-			STORE s0,TempScratchPointer	;temporarily store pointer to MSB of accumulated I value
+			STORE s6,(s0)	;update MSB Accumulated value
+			LOAD  TempScratchPointer,s0	;temporarily store pointer to MSB of accumulated I value
 ;s4 and s5 still have LUTptr to add pi/2
 			ADD s4,64'd
-			OUTPUT s4,LOMSB
-			OUTPUT s5,LOLSB ;Send next sinewave address to LUT - use write of LSB to delay trigger latch of multiplier
+;				OUTPUT s5,LOLSB ;Send next sinewave address to LUT -  already done!
+			OUTPUT s4,LOMSB ;Actually only need to output MSB  - use write of MSB to delay trigger latch of multiplier
+			
+NEED To wait for multiplication otherwise cordic will be out of step
+
 			INPUT	s2,DemodMSB	;input previous LO tone multiplied by the signal (for accumulation)
 			INPUT	s3,DemodLSB
 			ADD s0,02	;move back up to scratch pointer location for Q MSB of accumulating signal (of previous tone!)
-			FETCH s6,s0	;MSB of Accumulated Q demod value
+			FETCH s6,(s0)	;MSB of Accumulated Q demod value
 			ADD  s0,01
-			FETCH s7,s0	;LSB of Accumulated Q demod value (base + 6)
+			FETCH s7,(s0)	;LSB of Accumulated Q demod value (base + 6)
 			ADD  s7,s3	;signed accumulate into Accumulated value
-			ADDC s6,s2	;accumulate into Accumulated value
-			STORE s7,s0	;update LSB Accumulated value
+			ADDCY s6,s2	;accumulate into Accumulated value
+			STORE s7,(s0)	;update LSB Accumulated value
 			SUB s0,01	;decrement scratch pointer s0 (s0 now at base + 5)
-			STORE s6,s0	;update MSB Accumulated value
-			CALL CheckMatureAndOuput
+			STORE s6,(s0)	;update MSB Accumulated value
+			CALL CheckMatureAndOutput
 			RETURN
 
 ;Checks s1 is mature
@@ -217,18 +241,62 @@ CheckMatureAndOutput:	LOAD	s3,SampleCounter
 ;Cordic takes I in s0(LSB)and s1(MSB) and Q in s2,s3 and returns the amplitude in s0,s1 and the phase in s4,s5. s8 is the loop counter
 ; Useable range is for I and Q up to about +/-$3000
 ;normally get I and Q values from scratch. Scratch pointer
-Matured:		FETCH s1,TempScratchPointer	;pointer at MSB of I accumulated
-			ADD  TempScratchPointer,1 	;move pointer on to LSB of I accumulated
-			FETCH s0,TempScratchPointer
-			ADD  TempScratchPointer,1 	;move pointer on to MSB of Q accumulated
-			FETCH s3,TempScratchPointer
-			ADD  TempScratchPointer,1 	;move pointer on to LSB of Q accumulated
-			FETCH s2,TempScratchPointer
-			CALL CORDIC
-;now have amplitude and phase in s0/s1...s4,s5.
-			
+;need to use TempScratchPointer as s0 value which had pointed to the scratch area has been lost
+Matured:		FETCH s1,(TempScratchPointer)	;pointer at MSB of I accumulated
+			ADD  TempScratchPointer,01 	;move pointer on to LSB of I accumulated
+			FETCH s0,(TempScratchPointer)
+			ADD  TempScratchPointer,01 	;move pointer on to MSB of Q accumulated
+			FETCH s3,(TempScratchPointer)
+			ADD  TempScratchPointer,01 	;move pointer on to LSB of Q accumulated
+			FETCH s2,(TempScratchPointer)
+			CALL cordic
+;now have amplitude and phase in s0/s1...s4,s5 - need to calculate phase change and output the MSBs
+			LOAD s5,s0
+			CALL Export2User			;send 2 ascii codes for the amplitude MSB to the user
+			CALL StreamAmp
+			LOAD s5,s4
+			CALL Export2User			;send ascii codes for the phase MSB to the user
+			CALL StreamPhase
+			COMPARE TempScratchPointer,46	;STPBinc+6=46 is the pointer to the LSB of the Q accumulated value that of the stopB tone (ie the last one)
+			CALL Z,AddCRLF			;send end of line characters if treating last tone
 
+			ADD  TempScratchPointer,01 	;move pointer on to previous phase
+			FETCH s2,(TempScratchPointer)	;s2 now has msb of previous phase
+			SUB  s2,s4			;delta phase (signed)
+			CALL absval			;gets absolute value of s2 (phase shift)
+			ADD  TempScratchPointer,01 	;move pointer on to counter
+			FETCH s1,(TempScratchPointer)	;s1 has the counter
+			ADD s1,01
+			STORE s1,(TempScratchPointer)	;now increment the counter
+			
+			COMPARE s2,phase_threshold	;is it less than threshold, then set carry
+			CALL	NC,resetcounter		; if failed then reset the counter	
+			
+			COMPARE s1,count_value_to_trig	;s1 has phase constant counter, carry not set if count is high enough.
+			CALL	Whoopie			;seem to have a tone here!
 			RETURN		
+
+;Ultimately will use TempScratchPointer to work out which tone was detected
+Whoopie:		CALL	AddCRLF
+			LOAD s6,"Y"
+                        OUTPUT    s6, CmdToUser
+			LOAD s6,"E"
+                        OUTPUT    s6, CmdToUser
+			LOAD s6,"S"
+                        OUTPUT    s6, CmdToUser
+			LOAD s6,"!"
+                        OUTPUT    s6, CmdToUser
+			CALL	AddCRLF
+			RETURN
+
+
+resetcounter:		LOAD s1,00
+			STORE s1,(TempScratchPointer)	;now set counter to zero
+			RETURN
+
+
+
+
 
 ;Takes I in s0(LSB)and s1(MSB) and Q in s2,s3 and returns the amplitude in s0,s1 and the phase in s4,s5. s8 is the loop counter
 ; Useable range is for I and Q up to about +/-$3000	
@@ -271,14 +339,26 @@ negdecrmnt:		 SUB   s4,s0
 
 ; This TBD, should output 16 bit value, that goes through a sinewave LUT and multiplies by the signal and recover
 LUTandMultiply:             OUTPUT    s1, LOMSB
-                    OUTPUT    s0, LOLSB       ; Historical signal sent to multiplier
 
                     INPUT     s9, DemodMSB		;actually gets previously latched multiply corresponding to previous tone!
                     INPUT     s8, DemodLSB
                     RETURN       
 
 
+StreamAmp:	LOAD s0,TempScratchPointer	;possible values are 16,26,36 and 46
+		SR0  s0				;Divide by 0 to get 8 STRTA,13  STRTB ,18 STPA or 23  STPB
+		OUTPUT s5,(s0)			;direct amplitude MSB to the appropriate port
+		
 
+		RETURN
+
+StreamPhase:	LOAD s0,TempScratchPointer
+		SR0  s0
+		ADD	s0,01				;Offset to output phase values get 9 STRTA,14  STRTB ,19 STPA or 24  STPB
+		OUTPUT s5,(s0)			;direct phase MSB to the appropriate port
+		
+
+		RETURN
 
 
 
@@ -378,16 +458,33 @@ add90:              LOAD      s1, 00
                     LOAD      s5, half_pi_MSB
                     RETURN       
 
-Transmitmode:       FETCH     s1, State
-                    OR        s1, 02
-                    STORE     s1, State           ; set bit 1
-                    
-                    FETCH      s1,AGCvalue
-                    STORE	  s1,AGCvalueRX
-                    FETCH	  s1,AGCvalueTX		  ;recovers last used value for AGCvalur in this mode
-                    STORE      s1,AGCvalue
-                    RETURN       
 
+;takes s2 and returns in s2 the absolute value of s2 (uses s6)
+absval:			    COMPARE      s2, 128'd
+                    CALL      NC, makeposval
+					RETURN
+
+
+; Turn negative value in s2 into a positive one (well will actualy make a positive value negative as well).
+makeposval:         LOAD      s6, 00
+                    SUB       s6, s2
+                    LOAD      s2, s6
+                    RETURN      
+
+
+; Takes value in s5 and converts to 2 ascii codes which are sent to the user picoblaze.
+Export2User:        CALL      Byte2Chars
+                    OUTPUT    s6, CmdToUser
+                    OUTPUT    s7, CmdToUser
+                    LOAD      s6, 20'd              ; terminate with space character
+                    OUTPUT    s6, CmdToUser
+                    RETURN       
+					
+AddCRLF:	    LOAD      s6, 13'd              ; terminate with CR
+                    OUTPUT    s6, CmdToUser
+                    LOAD      s6, 10'd              ; and with LF
+                    OUTPUT    s6, CmdToUser
+		    RETURN       
 					
 
 

@@ -1,3 +1,4 @@
+;GV09 changed terminator caracter to LF rather than CR
 ;GV08 lower audio volume control to about 0.8V (Prod7)
 ;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
 ;GV06 Increase output amplitude of SSB in DSPpico on TX
@@ -106,7 +107,7 @@
 ; Now for Godil Board
 ; Version for multi pico boot with shifted bit offsets on oport
 
-CONSTANT Versionno,			08               ; 1 July 2016
+CONSTANT Versionno,			09               ; Dec 2016
 CONSTANT InitialVolume,			133'd		;lowerred volume
 
 CONSTANT MinorVersionno,    EE                 ; Pete
@@ -239,11 +240,12 @@ CONSTANT ArchiveDataLSB,		2'd
 CONSTANT ArchiveDataMSB,		3'd
 
 CONSTANT DSPcmd,				4'd                   ; message from DSP unit 
-CONSTANT BTcmd,					5'd                   ; message from BT unit   TEMP - DataReadback from Flash
-CONSTANT KPcmd,					6'd                   ; message from KeyPad unit TEMP - DataReadback_1 from Flash
+CONSTANT BTcmd,					5'd                   ; message from BT unit   
+CONSTANT KPcmd,					6'd                   ; message from KeyPad unit 
 
-CONSTANT DataReadback,			7'd                   ; message from BT unit   TEMP - DataReadback from Flash
-CONSTANT DataReadback_1,		8'd                   ; message from KeyPad unit TEMP - DataReadback_1 from Flash
+CONSTANT TDcmd,					7'd                   ; message from Tone detect
+
+;CONSTANT DataReadback_1,		8'd                   ; message from KeyPad unit TEMP - DataReadback_1 from Flash
 
 CONSTANT DSPRAMrdbkMSB,			9'd
 CONSTANT DSPRAMrdbkLSB,			10'd
@@ -297,8 +299,9 @@ CONSTANT Acknowledge,			14'd
 CONSTANT DSPFifo,				16'd
 CONSTANT BTFifo,				32'd
 CONSTANT KPFifo,				64'd
+CONSTANT TDFifo,				128'd
 
-; Set bit 4,5,6 to acknowledge FIFO of DSP,BT or Keypad (ie write 16,32 or 64)				
+; Set bit 4,5,6,7 to acknowledge FIFO of DSP,BT, Keypad, Tone Detect (ie write 16,32, 64 or 128)				
 
 
 CONSTANT FlashData,				17'd
@@ -382,11 +385,11 @@ init:               LOAD      ScratchPointer, 00
 
 
 
+			LOAD      s0, 00
                     STORE     s0, Latch7          ; initialise latch 7 bits!
                     LOAD      s5, 53             ; gain to lowish
                     STORE     s5, ADCgain         ; save initial value
                     STORE     s5, ADCGainRX       ; save initial value for RX
-
                     CALL      SetAnGain           ; set gain and calibrate	
                     LOAD      s5, 59             ; gain to lowish
                     STORE     s5, ADCGainTX       ; save initial value forTX
@@ -429,6 +432,7 @@ loop:               CALL      CheckADClevel
                     AND       s0, 08               ; look at streaming RX bit
                     COMPARE      s0, 08
                     CALL      Z, Check4CmdfromDSP ; If fifo character then send to terminal !!!!!!!!!!!!!!!!!!!! reinstate this 9/7/2013
+                    CALL      Z, Check4CmdfromTD ; If fifo character then send to terminal 
 
 
 
@@ -446,10 +450,10 @@ loop:               CALL      CheckADClevel
                     CALL      Z, BeaconBeep
 
 
-; Pete  enabled 24 Feb 2015
-                    CALL      Check4CmdfromBT     ; receive from BT and echo to terminal
+; Pete  enabled 24 Feb 2015 - inhibit in tonedetect
+;                    CALL      Check4CmdfromBT     ; receive from BT and echo to terminal
 
-                    JUMP      C, HandleBTCommand  ; If less than 128 there is a value to give back and display.
+;                    JUMP      C, HandleBTCommand  ; If less than 128 there is a value to give back and display.
 
 HandleBTCommand_Done: 
 ; pete end
@@ -461,10 +465,10 @@ HandleBTCommand_Done:
                     COMPARE      s6, FF
                     JUMP      Z, loop             ; If no character then skip-MAKE SURE ANYTHINGTO BE PERFORMED REGULARLY IS DONE BEFORE THIS POINT
 
-                    COMPARE      s6, 13'd
-                    JUMP      Z, interpcommand    ; This is end of command character
                     COMPARE      s6, 10'd
-                    JUMP      Z, loop             ; If LF ignore
+                    JUMP      Z, interpcommand    ; This is end of command character (LF now! as of Dec 2016)
+                    COMPARE      s6, 13'd
+                    JUMP      Z, loop             ; If CR ignore
                     COMPARE      ScratchPointer, 16'd  ; Check we are not writing too many characters to the scratchpad
                     JUMP      NC, loop            ; don't write to scratch if Pointer (counter) 16 or above
                     STORE     s6, (ScratchPointer)  ; Save command character
@@ -758,8 +762,6 @@ isS:                CALL      getnextscratchchar
                     COMPARE      s0, 76'd              ; is this a L?
                     JUMP      Z, isSL             ; Set Loran Blanking
 
-                    COMPARE      s0, 77'd              ; is this a M?
-                    JUMP      Z, isSM             ; 
 ; 					COMPARE      s0, 83'd              ; is this a S?
 ; JUMP      Z, isSS             ;
                     COMPARE      s0, 85'd              ; is this a U
@@ -844,156 +846,6 @@ isSKS:                                            ; LOAD      s0, 83'd          
                     JUMP      init
 
 
-; Testmemory TEMP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! -memory instructions
-isSM:               CALL      getnextscratchchar
-                    COMPARE      s0, 87'd              ; is this a W?
-                    JUMP      Z, isSMW            ; 
-                    COMPARE      s0, 82'd              ; is this a R?
-                    JUMP      Z, isSMR            ; 
-                    COMPARE      s0, 68'd              ; is this a D?
-                    JUMP      Z, isSMD            ; 
-                    COMPARE      s0, 83'd              ; is this a S?
-                    JUMP      Z, isSMS            ; 
-
-                    JUMP      init
-
-
-; Testmemory TEMP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-; write data to flash
-isSMW:              LOAD      s5, WREN
-                    OUTPUT       s5, FlashData
-                    CALL      nowsend2flashback   ; write this bit already and come back here!
-
-                    CALL      delay_1us           ; wait to complete (maybe 1us enough?)
-
-                    LOAD      s5, SER             ; sector erase
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 04             ; load address to erase (part way through memory)
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 00               ; load address to write to
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 00               ; load address to write to
-                    OUTPUT       s5, FlashData
-
-                    CALL      nowsend2flashback   ; write this bit already and come back here!
-                    CALL      delay_1s            ; wait to complete
-                    CALL      delay_1s
-                    CALL      delay_1s            ; TO be OPTIMIZED!!!!!!!!!!!!!!!!!!!!!!!
-                    LOAD      s5, WREN
-                    OUTPUT       s5, FlashData
-                    CALL      nowsend2flashback   ; write this bit already and come back here!
-
-                    CALL      delay_1us           ; wait to complete sending serial bits out!
-                    CALL      delay_1us           ; wait to complete (maybe 1us enough?)
-                    CALL      delay_1us           ; wait to complete sending serial bits out!
-                    CALL      delay_1us           ; wait to complete (maybe 1us enough?)
-                    CALL      delay_1us           ; wait to complete sending serial bits out!
-                    CALL      delay_1us           ; wait to complete (maybe 1us enough?)
-                    CALL      delay_1us           ; wait to complete (maybe 1us enough?)
-                    CALL      Status
-
-                    LOAD      s5, PP              ; write page command
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 04             ; load address to write to (part way through memory)
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 00               ; load address to write to
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 00               ; load address to write to
-                    OUTPUT       s5, FlashData
-
-
-isSMWloop:          COMPARE      s9, ScratchPointer  ; break out of loop after reading final character command.
-                    JUMP      Z, nowsend2flash    ; if so write to flash and break out
-                    CALL      getnextvalue
-                    OUTPUT       s5, FlashData
-                    JUMP      isSMWloop           ; loop back to get next data value
-
-
-
-
-; FAST_READ
-isSMR:              LOAD      s5, FAST_READ
-                    OUTPUT       s5, FlashData
-                    CALL      getnextvalue        ; load address to write to (about half way through memory ~10)
-                    OUTPUT       s5, FlashData
-                    CALL      getnextvalue
-                    OUTPUT       s5, FlashData
-                    CALL      getnextvalue
-                    OUTPUT       s5, FlashData
-; now send dummy bytes to get 2 byte values					
-                    LOAD      s5, 00               ; dummy
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 00               ; dummy byte
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 00               ; dummy byte
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 36'd              ; was 16 should be 9x4=36
-                    OUTPUT       s5, ProgramM        ; initiates flash write - may take some time for pp command!
-                    LOAD      s5, 00               ; reset
-                    OUTPUT       s5, ProgramM        ; 
-                    CALL      delay_1us           ; wait to complete sending serial bits out!
-                    CALL      delay_1us           ; wait to complete (maybe 1us enough?)
-                    CALL      delay_1us           ; wait to complete sending serial bits out!
-                    CALL      delay_1us           ; wait to complete (maybe 1us enough?)
-                    CALL      delay_1us           ; wait to complete sending serial bits out!
-                    CALL      delay_1us           ; wait to complete (maybe 1us enough?)
-
-                    INPUT        s5, DataReadback_1
-                    CALL      Byte2UART           ; echo values as 2 ascii codes back to terminal
-                    INPUT        s5, DataReadback
-                    CALL      Byte2UART
-
-                    JUMP      init                ; loop back
-
-
-; READ DID
-isSMD:              LOAD      s5, RDID
-                    OUTPUT       s5, FlashData
-; now send dummy bytes to get 2 byte values					
-                    LOAD      s5, 00               ; dummy
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 00               ; dummy byte
-                    OUTPUT       s5, FlashData
-; LOAD      s5, 0               ; dummy byte
-; OUTPUT       s5, FlashData
-                    LOAD      s5, 36'd              ; was 16 should be 9x4=36
-                    OUTPUT       s5, ProgramM        ; initiates flash write 
-                    LOAD      s5, 00               ; reset
-                    OUTPUT       s5, ProgramM        ; 
-                    CALL      delay_1us           ; wait to complete sending serial bits out!
-                    CALL      delay_1us           ; wait to complete
-
-                    INPUT        s5, DataReadback_1  ; first value
-                    CALL      Byte2UART           ; echo values as 2 ascii codes back to terminal
-                    INPUT        s5, DataReadback    ; second value
-                    CALL      Byte2UART
-
-                    JUMP      init                ; loop back
-
-; Read status register
-isSMS:              CALL      Status
-
-                    JUMP      init                ; loop back
-
-Status:             LOAD      s5, RDSR
-                    OUTPUT       s5, FlashData
-; now send dummy bytes to get 2 byte values					
-                    LOAD      s5, 00               ; dummy
-                    OUTPUT       s5, FlashData
-                    LOAD      s5, 00               ; dummy byte
-                    OUTPUT       s5, FlashData
-                    CALL      nowsend2flashback
-                    CALL      delay_1us           ; wait to complete sending serial bits out!
-                    CALL      delay_1us           ; wait to complete
-                    CALL      SendCRLF
-
-                    INPUT        s5, DataReadback_1  ; first value
-                    CALL      Byte2UART           ; echo values as 2 ascii codes back to terminal
-                    INPUT        s5, DataReadback    ; second value
-                    CALL      Byte2UART
-                    CALL      SendCRLF
-
-                    RETURN       
 
 ; This streams from UART data to DSP to TX and never exits!
 isSS:               CALL      getnextscratchchar  ; get beacon offset in s0
@@ -1533,6 +1385,13 @@ sendKP2Terminal:    CALL      GetKPFifoChar
                     CALL      Send2UartTX         ; and echo back to terminal.
                     RETURN       
 
+; returns KP fifo character in s6 assuming present
+sendTD2Terminal:    CALL      GetTDFifoChar
+                    LOAD      s6, s0              ; get character
+                    AND       s6, 7F
+                    CALL      Send2UartTX         ; and echo back to terminal.
+                    RETURN       
+
 
 ; checks for command from DSP pico, if present in s6 and echo to terminal - otherwise s6>127
 Check4CmdfromDSP:   INPUT        s1, DSPcmd          ; Get character from DSP picoblaze (if present should be less than 128)
@@ -1552,6 +1411,13 @@ Check4CmdfromKP:    INPUT        s1, KPcmd           ; Get character from BT pic
                     LOAD      s6, s1
                     COMPARE      s1, 128'd             ; Is the fifo empty though? (if greater than 127) - could use routine like in DSPpico!
                     CALL      C, GetKPFifoChar
+                    RETURN       
+
+; checks for command from TDpico, if present in s6  - otherwise s6>127
+Check4CmdfromTD:    INPUT        s1, TDcmd           ; Get character from BT picoblaze (if present should be less than 128)
+                    LOAD      s6, s1
+                    COMPARE      s1, 128'd             ; Is the fifo empty though? (if greater than 127) - could use routine like in DSPpico!
+                    CALL      C, GetTDFifoChar
                     RETURN       
 
 
@@ -1576,6 +1442,14 @@ GetKPFifoChar:      LOAD      s0, KPFifo
                     OUTPUT       s0, Acknowledge     ; read next fifo character - this sends a read pulse to the FIFO
                     LOAD      s0, KPFifo          ; dummy, wait a bit longer for character to present itself
                     INPUT        s6, KPcmd           ; now get my character
+                    AND       s6, 7F             ; mask off top bit
+                    RETURN       
+
+; Routine to recover a character from the TDFIFO in s6
+GetTDFifoChar:      LOAD      s0, TDFifo
+                    OUTPUT       s0, Acknowledge     ; read next fifo character - this sends a read pulse to the FIFO
+                    LOAD      s0, KPFifo          ; dummy, wait a bit longer for character to present itself
+                    INPUT        s6, TDcmd           ; now get my character
                     AND       s6, 7F             ; mask off top bit
                     RETURN       
 
