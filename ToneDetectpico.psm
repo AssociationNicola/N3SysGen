@@ -58,6 +58,7 @@ CONSTANT	LOMSB,			1'd
 CONSTANT	BRAMaddrMSB,		2'd
 CONSTANT	BRAMaddrLSB,		3'd
 ;also used:8,9,13,14,18,19,23,24 -  8 STRTA,13  STRTB ,18 STPA or 23  STPB, and 9 STRTA,14  STRTB ,19 STPA or 24  STPB
+; 6,11,16,21 used for running Itone values and 7,12,17,22 for Qtone values
 
 
 ; Scratchpad registers
@@ -69,7 +70,7 @@ CONSTANT	AVEtoneAmp,	9'd	;Is this needed?
 
 CONSTANT	STRTAinc,	10'd	;This is the base address loaded into s0 before calling 'TreatTone'
 CONSTANT	STRTAptrMSB,	11'd	;16 bit value used to generate the LUT ptr - won't use these names, just documented for reference
-CONSTANT	STRTAptrLSB,	12'd	
+CONSTANT	STRTAptrLSB,	12'd	;fine resolution
 CONSTANT	STRTAAccuDemodIMSB,	13'd	;This is the 16 bit value returned from the mulitplier
 CONSTANT	STRTAAccuDemodILSB,	14'd	;Will this byte be used?
 CONSTANT	STRTAAccuDemodQMSB,	15'd	;This is th e 16 bit value of the demod component accumulated
@@ -122,7 +123,7 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
 
 
 ; Routine to look at lowest bit of Strobe to detect rising edge.
-AwaitAudioVal:	  	INPUT     s0, Strobe
+AwaitAudioVal:	  INPUT     s0, Strobe
                     AND       s0, 01               ; look only at lowest bit
                     COMPARE   s0, 01
                     JUMP      Z, AwaitAudioVal    ; if 1 wait...
@@ -130,9 +131,11 @@ AwaitRise:          INPUT     s0, Strobe
                     AND       s0, 01               ; look only at lowest bit
                     COMPARE   s0, 00
                     JUMP      Z, AwaitRise        ; if 0 still, wait a bit more...
+;Demod signal is not stable till ~6 clock cycles after rising edge, so should maybe use falling edge??
+;so will be stable after ~3 instructions!
+		
 
-
-		OUTPUT	SampleCounter,BRAMaddrLSB	;send to BRAM address and initiate write
+;		OUTPUT	SampleCounter,BRAMaddrLSB	;send to BRAM address and initiate write
 
  		FETCH s0,SampleCounterMSB
 					
@@ -142,25 +145,25 @@ AwaitRise:          INPUT     s0, Strobe
 		OUTPUT	s0,BRAMaddrMSB	;And send to BRAM address ready for LSB to be sent and initiate write
 				
  ;start treating StrtToneA
-StartDemod:	LOAD s0,STRTAinc
-		LOAD s1,00	;(counter value when mature)
+StartDemod:	LOAD s0,STRTAinc  ;Note s0 is being used to point to the location of the values in scratch memory!
+		LOAD s1,00'd	;(counter value when mature)
 		CALL DemodulateTone  ;and checks if the accumulation has matured (from s1) and if so do cordic
 			
 
 
  ;start treating StrtToneB
 		LOAD s0,STRTBinc
-		LOAD s1,16	;(counter value when mature)
+		LOAD s1,16'd	;(counter value when mature)
 		CALL DemodulateTone
 
  ;start treating StpToneA
 		LOAD s0,STPAinc
-		LOAD s1,32	;(counter value when mature)
+		LOAD s1,32'd	;(counter value when mature)
 		CALL DemodulateTone
 
  ;start treating StpToneB
 		LOAD s0,STPBinc
-		LOAD s1,48	;(counter value when mature)
+		LOAD s1,48'd	;(counter value when mature)
 		CALL DemodulateTone
 
 
@@ -177,9 +180,9 @@ StartDemod:	LOAD s0,STRTAinc
 DemodulateTone:		FETCH s2,(s0)	;Tone increment (pointed to in scratch by s0, to increment through sine wave LUT)
 			LOAD s3,00
 ;Need to right shift into s3 to scale correctly (as they are 4 times too big)
-			SRX  s2
+			SR0  s2		;The increment is a positive value (0-255 when x4) so should be kept positive!
 			SRA  s3		;and carry containing lowest bit
-			SRX  s2
+			SR0  s2
 			SRA  s3		;and carry containing lowest bit (doing this twice limits highest frequency to about 2kHz)
 			
 			ADD  s0,01
@@ -199,9 +202,26 @@ DemodulateTone:		FETCH s2,(s0)	;Tone increment (pointed to in scratch by s0, to 
 
 			INPUT	s2,DemodMSB	;input previous LO tone multiplied by the signal (for accumulation)
 			INPUT	s3,DemodLSB
+;This value may be too big as it stands to accumulate so need to scale down so as not to overflow
+;			SRX	s2
+;			SRA	s3
+;			SRX	s2
+;			SRA	s3
+;			SRX	s2
+;			SRA	s3
+
 			ADD s0,02	;move back up to scratch pointer location for MSB of I accumulating signal (of previous tone!)
 			FETCH s6,(s0)	;MSB of Accumulated I demod value
-			ADD  s0,01
+
+;added this bit to get debug info
+			SUB  s0,01	;to get an even value!
+			SRA	s0	;divide by 2 to get 6,11,16 or 21
+			OUTPUT s6,(s0)	;Export intermediate I value
+			SLA	s0	;now get s0 back on track
+			ADD  s0,01	;add one to get back and another to advance to I LSB accu
+;Would be ADD s0,01 instead of the above debug
+			ADD  s0,01	;add one to get back and another to advance to I LSB accu
+
 			FETCH s7,(s0)	;LSB of Accumulated I demod value (base + 4)
 			ADD  s7,s3	;signed accumulate into Accumulated value
 			ADDCY s6,s2	;accumulate into Accumulated value
@@ -218,9 +238,26 @@ DemodulateTone:		FETCH s2,(s0)	;Tone increment (pointed to in scratch by s0, to 
 
 			INPUT	s2,DemodMSB	;input previous LO tone multiplied by the signal (for accumulation)
 			INPUT	s3,DemodLSB
+;This value may be too big as it stands to accumulate so need to scale down so as not to overflow?
+;			SRX	s2
+;			SRA	s3
+;			SRX	s2
+;			SRA	s3
+;			SRX	s2
+;			SRA	s3
+
 			ADD s0,02	;move back up to scratch pointer location for Q MSB of accumulating signal (of previous tone!)
 			FETCH s6,(s0)	;MSB of Accumulated Q demod value
-			ADD  s0,01
+
+;added this bit to get debug info
+			SUB  s0,01	;to get an even value!
+			SRA	s0	;divide by 2 to get 7,12,17 or 22
+			OUTPUT s6,(s0)	;Export intermediate Q value
+			SLA	s0	;now get s0 back on track
+			ADD  s0,01	;add one to get back and another to advance to I LSB accu
+;Would be ADD s0,01 instead of the above debug
+			ADD  s0,01	;add one to get back and another to advance to I LSB accu
+
 			FETCH s7,(s0)	;LSB of Accumulated Q demod value (base + 6)
 			ADD  s7,s3	;signed accumulate into Accumulated value
 			ADDCY s6,s2	;accumulate into Accumulated value
@@ -248,18 +285,37 @@ Matured:		FETCH s1,(TempScratchPointer)	;pointer at MSB of I accumulated
 			ADD  TempScratchPointer,01 	;move pointer on to MSB of Q accumulated
 			FETCH s3,(TempScratchPointer)
 			ADD  TempScratchPointer,01 	;move pointer on to LSB of Q accumulated
-			FETCH s2,(TempScratchPointer)
+			FETCH s2,(TempScratchPointer)	;TempScratchPointer has now increased by 3
+;Add this bit to have a fixed known input to the cordic (but leave LSB variable)
+;			LOAD s1, 28
+;			LOAD s3, 28
+;end of bit to be removed
 			CALL cordic
-;now have amplitude and phase in s0/s1...s4,s5 - need to calculate phase change and output the MSBs
-			LOAD s5,s0
-			CALL Export2User			;send 2 ascii codes for the amplitude MSB to the user
+;now have amplitude and phase in s0/s1(MSB AMP)...s4,s5(MSB Phase) - need to calculate phase change and output the MSBs
+;have phase in s5
+			CALL StreamPhase				; This does not affect s5! - but does kill s0
+;			CALL Export2User	KILLS s5!		;send 2 ascii codes for the amplitude MSB to the user - NOTE THAT Export2User destroys the value of s5!
+			LOAD s5,s1
 			CALL StreamAmp
-			LOAD s5,s4
-			CALL Export2User			;send ascii codes for the phase MSB to the user
-			CALL StreamPhase
+;			CALL Export2User	KILLS s5!		;send ascii codes for the phase MSB to the user - NOTE THAT Export2User destroys the value of s5!
+;now needs to store the phase
+;Need to reset accumulators to zero! (Tempscratch (originally inc+3) is now inc+6 but need to reseet addresses of original! TempScratchPointer, TempScratchPointer+1,+2 +3)
+			LOAD s0,TempScratchPointer
+			LOAD s1,00
+			STORE s1,(s0)
+			SUB  s0,01
+			STORE s1,(s0)
+			SUB  s0,01
+			STORE s1,(s0)
+			SUB  s0,01
+			STORE s1,(s0)
+
+
 			COMPARE TempScratchPointer,46	;STPBinc+6=46 is the pointer to the LSB of the Q accumulated value that of the stopB tone (ie the last one)
 			CALL Z,AddCRLF			;send end of line characters if treating last tone
 
+			RETURN		;TEMP until the phase constant code below is sorted out!
+;This last part to be corrected to check magnitude of phase shift
 			ADD  TempScratchPointer,01 	;move pointer on to previous phase
 			FETCH s2,(TempScratchPointer)	;s2 now has msb of previous phase
 			SUB  s2,s4			;delta phase (signed)

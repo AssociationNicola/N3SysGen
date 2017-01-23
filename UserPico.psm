@@ -1,3 +1,4 @@
+;GV0A Try writing to BRAM from ARM
 ;GV09 changed terminator caracter to LF rather than CR
 ;GV08 lower audio volume control to about 0.8V (Prod7)
 ;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
@@ -107,7 +108,7 @@
 ; Now for Godil Board
 ; Version for multi pico boot with shifted bit offsets on oport
 
-CONSTANT Versionno,			09               ; Dec 2016
+CONSTANT Versionno,			0A               ; JAN 2017
 CONSTANT InitialVolume,			133'd		;lowerred volume
 
 CONSTANT MinorVersionno,    EE                 ; Pete

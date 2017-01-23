@@ -458,7 +458,7 @@ AwaitRise:          INPUT     s0, Strobe
 
 
 ; perform automatic gain contrl
-                    FETCH     s3, AGCvalue
+                    FETCH     s3, AGCvalue		;This needs to be corrected from the value from tone detect
 					CALL      AGC 		  						;Now with external MUX to adjust AGC
 					CALL	  Abs16Val
 					STORE	  s3,NormalisedMagMSB				
@@ -665,294 +665,294 @@ Divide4:   SR0		s3
 		   RETURN		
 
 
-
-SpeakerOn:		 LOAD 	s1,01
-				 OUTPUT s1,EnableSpeaker
-		 		 RETURN
-		 		 
-SpeakerOff:		RETURN	 				 ;Disable for the moment
-				LOAD 	s1,00
-				OUTPUT	s1,EnableSpeaker
-		 		 		
-		 		RETURN
+;Dont need the following (21/1/17)
+;SpeakerOn:		 LOAD 	s1,01
+;				 OUTPUT s1,EnableSpeaker
+;		 		 RETURN
+;		 		 
+;SpeakerOff:		RETURN	 				 ;Disable for the moment
+;				LOAD 	s1,00
+;				OUTPUT	s1,EnableSpeaker
+;		 		 		
+;		 		RETURN
 		 		 
 ;Routines to average I and Q demodulated tone signals
 ;Check the amplitude of the demodulated and averaged signals compared to long average - AGCcounter==0 can be used to top up long average
 ;s7 used to note if LO is negative
 ;Enter with received signal MSB in s1 and try and keep in s8!
 ;first accumulate short and long averages of all tones I and Q
-AverageToneDemod:	 LOAD s8,s1
-				 LOAD s6,00		   ;This will be used to count through 4 tones in the loop below
+;AverageToneDemod:	 LOAD s8,s1
+;				 LOAD s6,00		   ;This will be used to count through 4 tones in the loop below
 				 
-DemodLoop:		 LOAD s5,StrtToneAPtrLSB 	  ;value of LSB of pointer to Scratchpad element for TonePtrs
-				 ADD  s5,s6				;Move up to ptr being treated
-				 FETCH s0,(s5)			;the tone pointer for the LSB should now be in s0
-				 LOAD  s2,FirstToneInc	;Scratch address for StrtToneAInc
-				 ADD   s2,s6
-				 FETCH s4,(s2)			;Get StrtToneAInc in s4 etc...
-				 SUB   s5,01				;Back 1 index to MSB
-				 FETCH s1,(s5)			;the sinewave pointer for the MSB should now be in s1				
-				 ADD  s0,s4				;Increment LSB!!
-				 ADDCY s1,00				;Add carry to MSB 	  ->This is OK as increment is positive	  	  	  		 	 	   					 	  	 	
-				 STORE s1, (s5)			;Value of MSB of sinewave pointer has been incremented in scratch pad
-				 ADD  s5,01
-				 STORE s0, (s5)			;Value of LSB of pointer has been incremented in scratch pad
-;now rotate 16 bit pointer to get 4 bits used to address the sinewave values
-				 SL0   s0
-				 SLA   s1
-				 SL0   s0
-				 SLA   s1
-				 AND   s1,0F			;keep lowest 4 bits to have pointer to one of 16 sinewave values
-				 LOAD  s9,s1
-				 FETCH s3,(s9)		  ;get sinewave at ptr value in s9 and put in s3
-				 CALL  MultSigByLO
-				 
-				 
-				 
-				 
-				 
+;DemodLoop:		 LOAD s5,StrtToneAPtrLSB 	  ;value of LSB of pointer to Scratchpad element for TonePtrs
+;				 ADD  s5,s6				;Move up to ptr being treated
+;				 FETCH s0,(s5)			;the tone pointer for the LSB should now be in s0
+;				 LOAD  s2,FirstToneInc	;Scratch address for StrtToneAInc
+;				 ADD   s2,s6
+;				 FETCH s4,(s2)			;Get StrtToneAInc in s4 etc...
+;				 SUB   s5,01				;Back 1 index to MSB
+;				 FETCH s1,(s5)			;the sinewave pointer for the MSB should now be in s1				
+;				 ADD  s0,s4				;Increment LSB!!
+;				 ADDCY s1,00				;Add carry to MSB 	  ->This is OK as increment is positive	  	  	  		 	 	   					 	  	 	
+;				 STORE s1, (s5)			;Value of MSB of sinewave pointer has been incremented in scratch pad
+;				 ADD  s5,01
+;				 STORE s0, (s5)			;Value of LSB of pointer has been incremented in scratch pad
+;;now rotate 16 bit pointer to get 4 bits used to address the sinewave values
+;				 SL0   s0
+;				 SLA   s1
+;				 SL0   s0
+;				 SLA   s1
+;				 AND   s1,0F			;keep lowest 4 bits to have pointer to one of 16 sinewave values
+;				 LOAD  s9,s1
+;				 FETCH s3,(s9)		  ;get sinewave at ptr value in s9 and put in s3
+;				 CALL  MultSigByLO
+;				 
+;				 
+;				 
+;				 
+;				 
 ;Now need to accumulate demodulated I value which is in s1:
-
-
-;value to accumulate is in s1
-	   	        LOAD s2, AveStrtToneALSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
-	   	        CALL 	DoAccumulate
-	   	         
-
-
-;Now treat Q_LO value
-
-				ADD   s9,04			  ;add 1/4 period
-				AND   s9,0F			;keep lowest 4 bits to have pointer to one of 16 cosinewave values
-				FETCH s3,(s9)			  ;get cosinewave at ptr value in s9 and put in s3
-				CALL  MultSigByLO
-				
-; accumulate demodulated Q value which is in s1:
-
-
-	   	        LOAD s2, AveStrtToneALSB_Q
-				CALL 	DoAccumulate
-	   	         	
-	            FETCH  s0,AGCcounter
-	            COMPARE   s0,00
-	            CALL   Z,DolongAve
-	
-;now check for end of looping
-				 ADD   	s6,02	 			  ;next tone
-				 COMPARE s6,08
-				 JUMP NZ, DemodLoop		  ;loop if more tones to demodulate
-
-;Now check amplitude of demodulated signals
-	 	        FETCH	s3,AveStrtToneAMSB_I
-	 	        CALL	absval				;Get the magnitude
-	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
-	 	        FETCH	s3,AveStrtToneAMSB_Q
-	 			CALL	absval				;Get the magnitude
-	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
-	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
-;				SR0	s0					;Divide by 2 again
-;				SR0	s0					;Divide by 2 again - increase gain by further 4
-	 	
-	 	        FETCH	s3,LongAveStrtToneAMSB_I
-	 	        CALL	absval				;Get the magnitude
-	 	        LOAD	s1,s3				;Abs value of ToneA_I in s1
-	 	        FETCH	s3,LongAveStrtToneAMSB_Q
-	 			CALL	absval				;Get the magnitude
-	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s1
-	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
-;Now s1 has long term average level and s0 has short term average value of start tone A (but 4 times smaller)
-				OUTPUT	s0,StartToneA
-				OUTPUT	s1,StartToneALong
-			
-	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
-	 			CALL  C,SpeakerOn
-
-	 	        FETCH	s3,AveStrtToneBMSB_I
-	 	        CALL	absval				;Get the magnitude
-	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
-	 	        FETCH	s3,AveStrtToneBMSB_Q
-	 			CALL	absval				;Get the magnitude
-	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
-	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
-;				SR0	s0					;Divide by 2 again
-;				SR0	s0					;Divide by 2 again
-	 	
-	 	        FETCH	s3,LongAveStrtToneBMSB_I
-	 	        CALL	absval				;Get the magnitude
-	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
-	 	        FETCH	s3,LongAveStrtToneBMSB_Q
-	 			CALL	absval				;Get the magnitude
-	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
-	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
-;Now s1 has long term average level and s0 has short term average value of start tone B (but 4 times smaller)
-				OUTPUT	s0,StartToneB
-				OUTPUT	s1,StartToneBLong
-
-	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
-	 			CALL  C,SpeakerOn
-
-	 	        FETCH	s3,AveStopToneAMSB_I
-	 	        CALL	absval				;Get the magnitude
-	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
-	 	        FETCH	s3,AveStopToneAMSB_Q
-	 			CALL	absval				;Get the magnitude
-	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
-	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
-;				SR0	s0					;Divide by 2 again
-;				SR0	s0					;Divide by 2 again
-	 	
-	 	        FETCH	s3,LongAveStopToneAMSB_I
-	 	        CALL	absval				;Get the magnitude
-	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
-	 	        FETCH	s3,LongAveStopToneAMSB_Q
-	 			CALL	absval				;Get the magnitude
-	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
-	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
-;Now s1 has long term average level and s0 has short term average value of stop tone A (but 4 times smaller)
-
-
-;				OUTPUT	s0,StopToneA
-
-;	Moved earlier			LOAD	s3,AveSignalMSB		   ;AveSignalMSB is actually a register!
-;				OUTPUT	s3,StopToneALong
-				
-;				OUTPUT	s1,StopToneALong
-
-	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
-	 			CALL  C,SpeakerOff
-
-	 	        FETCH	s3,AveStopToneBMSB_I
-	 	        CALL	absval				;Get the magnitude
-	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
-	 	        FETCH	s3,AveStopToneBMSB_Q
-	 			CALL	absval				;Get the magnitude
-	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
-	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
-;				SR0	s0					;Divide by 2 again
-;				SR0	s0					;Divide by 2 again
-	 	
-	 	        FETCH	s3,LongAveStopToneBMSB_I
-	 	        CALL	absval				;Get the magnitude
-	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
-	 	        FETCH	s3,LongAveStopToneBMSB_Q
-	 			CALL	absval				;Get the magnitude
-	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
-	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
-;Now s1 has long term average level and s0 has short term average value of stop tone B (but 4 times smaller)
-;				OUTPUT	s0,StopToneB
-	;			OUTPUT	s1,StopToneBLong
-
-	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
-	 			CALL  C,SpeakerOff
-	 	
-				
-				RETURN				
-
+;
+;
+;;value to accumulate is in s1
+;	   	        LOAD s2, AveStrtToneALSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
+;	   	        CALL 	DoAccumulate
+;	   	         
+;
+;
+;;Now treat Q_LO value
+;
+;				ADD   s9,04			  ;add 1/4 period
+;				AND   s9,0F			;keep lowest 4 bits to have pointer to one of 16 cosinewave values
+;				FETCH s3,(s9)			  ;get cosinewave at ptr value in s9 and put in s3
+;				CALL  MultSigByLO
+;				
+;; accumulate demodulated Q value which is in s1:
+;
+;
+;	   	        LOAD s2, AveStrtToneALSB_Q
+;				CALL 	DoAccumulate
+;	   	         	
+;	            FETCH  s0,AGCcounter
+;	            COMPARE   s0,00
+;	            CALL   Z,DolongAve
+;	
+;;now check for end of looping
+;				 ADD   	s6,02	 			  ;next tone
+;				 COMPARE s6,08
+;				 JUMP NZ, DemodLoop		  ;loop if more tones to demodulate
+;
+;;Now check amplitude of demodulated signals
+;	 	        FETCH	s3,AveStrtToneAMSB_I
+;	 	        CALL	absval				;Get the magnitude
+;	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
+;	 	        FETCH	s3,AveStrtToneAMSB_Q
+;	 			CALL	absval				;Get the magnitude
+;	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
+;	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
+;;				SR0	s0					;Divide by 2 again
+;;				SR0	s0					;Divide by 2 again - increase gain by further 4
+;	 	
+;	 	        FETCH	s3,LongAveStrtToneAMSB_I
+;	 	        CALL	absval				;Get the magnitude
+;	 	        LOAD	s1,s3				;Abs value of ToneA_I in s1
+;	 	        FETCH	s3,LongAveStrtToneAMSB_Q
+;	 			CALL	absval				;Get the magnitude
+;	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s1
+;	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
+;;Now s1 has long term average level and s0 has short term average value of start tone A (but 4 times smaller)
+;				OUTPUT	s0,StartToneA
+;				OUTPUT	s1,StartToneALong
+;			
+;	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
+;	 			CALL  C,SpeakerOn
+;
+;	 	        FETCH	s3,AveStrtToneBMSB_I
+;	 	        CALL	absval				;Get the magnitude
+;	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
+;	 	        FETCH	s3,AveStrtToneBMSB_Q
+;	 			CALL	absval				;Get the magnitude
+;	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
+;	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
+;;				SR0	s0					;Divide by 2 again
+;;				SR0	s0					;Divide by 2 again
+;	 	
+;	 	        FETCH	s3,LongAveStrtToneBMSB_I
+;	 	        CALL	absval				;Get the magnitude
+;	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
+;	 	        FETCH	s3,LongAveStrtToneBMSB_Q
+;	 			CALL	absval				;Get the magnitude
+;	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
+;	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
+;;Now s1 has long term average level and s0 has short term average value of start tone B (but 4 times smaller)
+;				OUTPUT	s0,StartToneB
+;				OUTPUT	s1,StartToneBLong
+;
+;	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
+;	 			CALL  C,SpeakerOn
+;
+;	 	        FETCH	s3,AveStopToneAMSB_I
+;	 	        CALL	absval				;Get the magnitude
+;	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
+;	 	        FETCH	s3,AveStopToneAMSB_Q
+;	 			CALL	absval				;Get the magnitude
+;	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
+;	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
+;;				SR0	s0					;Divide by 2 again
+;;				SR0	s0					;Divide by 2 again
+;	 	
+;	 	        FETCH	s3,LongAveStopToneAMSB_I
+;	 	        CALL	absval				;Get the magnitude
+;	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
+;	 	        FETCH	s3,LongAveStopToneAMSB_Q
+;	 			CALL	absval				;Get the magnitude
+;	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
+;	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
+;;Now s1 has long term average level and s0 has short term average value of stop tone A (but 4 times smaller)
+;
+;
+;;				OUTPUT	s0,StopToneA
+;
+;;	Moved earlier			LOAD	s3,AveSignalMSB		   ;AveSignalMSB is actually a register!
+;;				OUTPUT	s3,StopToneALong
+;				
+;;				OUTPUT	s1,StopToneALong
+;
+;	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
+;	 			CALL  C,SpeakerOff
+;
+;	 	        FETCH	s3,AveStopToneBMSB_I
+;	 	        CALL	absval				;Get the magnitude
+;	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
+;	 	        FETCH	s3,AveStopToneBMSB_Q
+;	 			CALL	absval				;Get the magnitude
+;	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
+;	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
+;;				SR0	s0					;Divide by 2 again
+;;				SR0	s0					;Divide by 2 again
+;	 	
+;	 	        FETCH	s3,LongAveStopToneBMSB_I
+;	 	        CALL	absval				;Get the magnitude
+;	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
+;	 	        FETCH	s3,LongAveStopToneBMSB_Q
+;	 			CALL	absval				;Get the magnitude
+;	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
+;	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
+;;Now s1 has long term average level and s0 has short term average value of stop tone B (but 4 times smaller)
+;;				OUTPUT	s0,StopToneB
+;	;			OUTPUT	s1,StopToneBLong
+;
+;	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
+;	 			CALL  C,SpeakerOff
+;	 	
+;				
+;				RETURN				
+;
 
 ;Does 16 bit signed accumulation of 8 bit signed value in s1 into s4/s5 which are recoverred from scratch pad pointed to by s2 (loading here the offset to the actual tone
 ;dependent on how many times round the loop we are)
-DoAccumulate:	 ADD   s2,s6
-				 FETCH s4,(s2)			;Now Get AveSToneLSB_Is in s4 etc...
-				 SUB   s2,01				;step back to MSB
-				 FETCH s5,(s2)			;Get AveSToneMSB_Is in s5
-				 LOAD  s3,FF			;Assume s1 is negative and use s3 for sign extension
-				 COMPARE  s1,128'd			;if s1 is 128 or bigger, then it is negative (carry not set)
-				 JUMP  NC,negaccum
-				 LOAD  s3,00		  		;sign extend with zeros
-negaccum:		 ADD   s4,s1			;Accumulate into averageLsB
-				 ADDCY s5,s3				;do carry to add into upper byte (keeping carry from previous add!!)
-				 LOAD  s0,s5
-				 SRX   s0
-				 SRX   s0					;reduce value to subtract by factor 4 to increase integration time constant and gain.	
-				 ADDCY s0,00					;round up if necessary 		   	  		
-				 SUB   s4,s0
-				 LOAD  s3,FF			;Assume s5 is negative and use s3 for sign extension				
-				 COMPARE  s5,128'd				;is this a negative number?
-				 JUMP  NC,negdecrmnt
-				 LOAD  s3,00					;do this if s5 is positive (sign extension)
-negdecrmnt:		 SUB   s4,s0
-				 SUBCY s5,s3				;subtract 1/256						
-				 STORE s5,(s2)
-				 ADD   s2,01				;move down to LSB again
-				 STORE s4,(s2)			;update scratchpad values   	
-				 RETURN
-
-
-
-
-
-;Routine to do LO_I and LO_Q multiplications - LO value in s3 (enter with s3) and signal in s1 (recoverred here from s8) -> result in s1
-MultSigByLO:	COMPARE  s3,128'd
-				JUMP  NC, LOisNeg		  ;Jump out if sinewave val is negative
-BackFromLOPos:	LOAD  s7,00				  ;LO is not negative
-	
-BackFromLONeg:	LOAD  	s1,s8		  ;stick signal value back in s1
-				COMPARE  s3,04				  ;This is the ABSOLUTE value of the LO
-				CALL  	Z,MultiplyBy4
-				COMPARE  s3,03				  ;This is the ABSOLUTE value of the LO
-				CALL  	Z,MultiplyBy3
-				COMPARE  s3,02				  ;This is the ABSOLUTE value of the LO
-				CALL  	Z,MultiplyBy2
-				 
-				 ;if abs(LO)=1  do nothing
-				
-				 COMPARE  s7,01		  ;was the LO value negative?
-				 RETURN  NZ		  ;return if positive
-				 CALL  invertval	 ;invert sign of s1 if negative
-				 RETURN
-
-
-
+;DoAccumulate:	 ADD   s2,s6
+;				 FETCH s4,(s2)			;Now Get AveSToneLSB_Is in s4 etc...
+;				 SUB   s2,01				;step back to MSB
+;				 FETCH s5,(s2)			;Get AveSToneMSB_Is in s5
+;				 LOAD  s3,FF			;Assume s1 is negative and use s3 for sign extension
+;				 COMPARE  s1,128'd			;if s1 is 128 or bigger, then it is negative (carry not set)
+;				 JUMP  NC,negaccum
+;				 LOAD  s3,00		  		;sign extend with zeros
+;negaccum:		 ADD   s4,s1			;Accumulate into averageLsB
+;				 ADDCY s5,s3				;do carry to add into upper byte (keeping carry from previous add!!)
+;				 LOAD  s0,s5
+;				 SRX   s0
+;				 SRX   s0					;reduce value to subtract by factor 4 to increase integration time constant and gain.	
+;				 ADDCY s0,00					;round up if necessary 		   	  		
+;				 SUB   s4,s0
+;				 LOAD  s3,FF			;Assume s5 is negative and use s3 for sign extension				
+;				 COMPARE  s5,128'd				;is this a negative number?
+;				 JUMP  NC,negdecrmnt
+;				 LOAD  s3,00					;do this if s5 is positive (sign extension)
+;negdecrmnt:		 SUB   s4,s0
+;				 SUBCY s5,s3				;subtract 1/256						
+;				 STORE s5,(s2)
+;				 ADD   s2,01				;move down to LSB again
+;				 STORE s4,(s2)			;update scratchpad values   	
+;				 RETURN
+;
+;
+;
+;
+;
+;;Routine to do LO_I and LO_Q multiplications - LO value in s3 (enter with s3) and signal in s1 (recoverred here from s8) -> result in s1
+;MultSigByLO:	COMPARE  s3,128'd
+;				JUMP  NC, LOisNeg		  ;Jump out if sinewave val is negative
+;BackFromLOPos:	LOAD  s7,00				  ;LO is not negative
+;	
+;BackFromLONeg:	LOAD  	s1,s8		  ;stick signal value back in s1
+;				COMPARE  s3,04				  ;This is the ABSOLUTE value of the LO
+;				CALL  	Z,MultiplyBy4
+;				COMPARE  s3,03				  ;This is the ABSOLUTE value of the LO
+;				CALL  	Z,MultiplyBy3
+;				COMPARE  s3,02				  ;This is the ABSOLUTE value of the LO
+;				CALL  	Z,MultiplyBy2
+;				 
+;				 ;if abs(LO)=1  do nothing
+;				
+;				 COMPARE  s7,01		  ;was the LO value negative?
+;				 RETURN  NZ		  ;return if positive
+;				 CALL  invertval	 ;invert sign of s1 if negative
+;				 RETURN
+;
+;
+;
 ;Routine every 256 cycles to update longer average
-DolongAve:	    LOAD s2, AveStrtToneAMSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
-				ADD   s2,s6
-				FETCH s1,(s2)			;Now Get AveSToneMSB_Is in s1 etc...
-				ADD s2,01
-				FETCH s0,(s2)			;Now Get AveSToneLSB_Is in s0 etc...
-				SLA s0
-				ADDCY s1,00     ;should now be rounded correctly
-				
-				LOAD s2, LongAveStrtToneALSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
-				CALL 	DoAccumulate
+;DolongAve:	    LOAD s2, AveStrtToneAMSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
+;				ADD   s2,s6
+;				FETCH s1,(s2)			;Now Get AveSToneMSB_Is in s1 etc...
+;				ADD s2,01
+;				FETCH s0,(s2)			;Now Get AveSToneLSB_Is in s0 etc...
+;				SLA s0
+;				ADDCY s1,00     ;should now be rounded correctly
+;				
+;				LOAD s2, LongAveStrtToneALSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
+;				CALL 	DoAccumulate
+;
+;				LOAD s2, AveStrtToneAMSB_Q	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
+;				ADD   s2,s6
+;				FETCH s1,(s2)			;Now Get AveSToneMSB_Qs in s1 etc...
+;				ADD s2,01
+;				FETCH s0,(s2)			;Now Get AveSToneLSB_Qs in s0 etc...
+;				SLA s0
+;				ADDCY s1,00     ;should now be rounded correctly
+;				
+;	   	        LOAD s2, LongAveStrtToneALSB_Q
+;				CALL 	DoAccumulate
+;
 
-				LOAD s2, AveStrtToneAMSB_Q	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
-				ADD   s2,s6
-				FETCH s1,(s2)			;Now Get AveSToneMSB_Qs in s1 etc...
-				ADD s2,01
-				FETCH s0,(s2)			;Now Get AveSToneLSB_Qs in s0 etc...
-				SLA s0
-				ADDCY s1,00     ;should now be rounded correctly
-				
-	   	        LOAD s2, LongAveStrtToneALSB_Q
-				CALL 	DoAccumulate
-
-
-		  	   	RETURN
+;		  	   	RETURN
 
 
 ;This inverts the sign of the LO sinewave to be positive, but notes this in a flag to take into account.
-LOisNeg:		 LOAD s7,01	  ;This means LO is negative
-				 CALL makeposval
-
-				 JUMP  BackFromLONeg
-				
+;LOisNeg:		 LOAD s7,01	  ;This means LO is negative
+;				 CALL makeposval
+;
+;				 JUMP  BackFromLONeg
+;				
 
 ;Multiplies value of s1 by 4 (SL0 X2)
-MultiplyBy4:	SL0 s1
-				SL0 s1
-				RETURN
+;MultiplyBy4:	SL0 s1
+;				SL0 s1
+;				RETURN
+;
+;MultiplyBy2:	SL0 s1
+;				RETURN
+;
+;MultiplyBy3:	LOAD s4,s1
+;				SL0 s1
+;				ADD	s1,s4
+;				RETURN
+;
 
-MultiplyBy2:	SL0 s1
-				RETURN
 
-MultiplyBy3:	LOAD s4,s1
-				SL0 s1
-				ADD	s1,s4
-				RETURN
-
-
-
-;This routine aims to double the signed analoge value in s0,s1 by finding sign of the value and doubling if small, increasing magnitude by 32 if less than 95 but more than 32 then limiting to 127 if more than 95
+;This routine aims to double the signed analogue value in s0,s1 by finding sign of the value and doubling if small, increasing magnitude by 32 if less than 95 but more than 32 then limiting to 127 if more than 95
 
 AudioDouble:  	   COMPARE s1,128'd
 				   JUMP	C,Posvalue
