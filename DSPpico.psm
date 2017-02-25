@@ -1,3 +1,4 @@
+;  To add code to take into account amplitude of start tone detected to adjust AGC
 ;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
 ;GV06 increase SSB amplitude on TX
 ;GV03 corrected OutAmp doubling and increased speaker volume
@@ -132,7 +133,8 @@ CONSTANT	BTaudioMSB,		6'd                   ; Input from headset micro
 CONSTANT	BTaudioLSB,		7'd                   ; 
 CONSTANT	RAMdataMSB,		8'd					  ;Data from variable storage RAM
 CONSTANT	RAMdataLSB,		9'd
-CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone, bit 2 is TX_high
+CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone, bit 2 is TX_high, bit 3 is speaker on (from tone detect)
+CONSTANT	StartToneAmp		11'd
 
 
 
@@ -189,7 +191,7 @@ CONSTANT	VolSetting,			15'd
 CONSTANT	OldPhaseMSB,		16'd
 CONSTANT	AudioScratch,		17'd
 
-CONSTANT	State,				18'd                  ; Bit 1 0=RX, 1=TX (TX_high), Bit 2 set is streaming TX data from UART
+CONSTANT	State,				18'd                  ; Bit 1 0=RX, 1=TX (TX_high), Bit 2 set is streaming TX data from UART, Bit 3 is 'Receiving' ie 0 when idle.
 
 ;CONSTANT	NormalisedSignalMSB,			19'd                  ; Current signal MSB after AGC
 CONSTANT	LVPtr,				20'd                  ; From HistoryStart to HistoryStart+41 (place to store most recent signal value)
@@ -612,27 +614,35 @@ BackfromTransmitting: 	INPUT   s0, Command         ; Check if FIFO character pre
  ;                   SUBC      BaselineMSB, s4
 
 ;TEMP DISPLAY of AveSignalMSB!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-				LOAD	s3,AveSignalUSB		   ;AveSignalMSB is actually a register!
-				OUTPUT	s3,StopToneALong
-				LOAD	s3,AveSignalMSB		   ;AveSignalMSB is actually a register!
-				OUTPUT	s3,StopToneB
-				LOAD	s3,AveSignalLSB		   ;AveSignalMSB is actually a register!
-				OUTPUT	s3,StopToneBLong
+			LOAD	s3,AveSignalUSB		   ;AveSignalMSB is actually a register!
+			OUTPUT	s3,StopToneALong
+			LOAD	s3,AveSignalMSB		   ;AveSignalMSB is actually a register!
+			OUTPUT	s3,StopToneB
+			LOAD	s3,AveSignalLSB		   ;AveSignalMSB is actually a register!
+			OUTPUT	s3,StopToneBLong
 
 
-	 			FETCH   s3, AGCvalue
-				OUTPUT	s3,StopToneA	   	   	   ;TEMP !!!!!!!!!!!!!!!! send AGC value to this position
+	 		FETCH   s3, AGCvalue
+			OUTPUT	s3,StopToneA	   	   	   ;TEMP !!!!!!!!!!!!!!!! send AGC value to this position
 
 
 ; Now adjust AGC value if necessary
-  	  		    FETCH     s3, AGCvalue
-  	  		    COMPARE   AveSignalUSB, AGCuppthreshold4	  ;Is really big? ie at threshold or above
-                CALL      NC, increaseAGC4     ; signal too big, increase attenuation by 12dB
+ 
+;Don't do this if Speaker is ON - ie is receiving a message, but on first time that Speaker on is high do a correction of AGCvalue
+			INPUT	s0,Status
+			AND	s0,8		;Look at speaker on bit
+			COMPARE s0,8
+			JUMP Z,Receiving	;Jump out if is receiving
 
-  	  		    COMPARE   AveSignalUSB, AGCuppthreshold2	  ;Is pretty big
-                CALL      NC, increaseAGC2     ; signal too big, increase attenuation by 6dB
 
-                COMPARE   AveSignalUSB, AGCuppthreshold	  ;or 18 or 9
+  	  		COMPARE   AveSignalUSB, AGCuppthreshold4	  ;Is really big? ie at threshold or above
+                	CALL      NC, increaseAGC4     ; signal too big, increase attenuation by 12dB
+
+  	  		COMPARE   AveSignalUSB, AGCuppthreshold2	  ;Is pretty big
+                	CALL      NC, increaseAGC2     ; signal too big, increase attenuation by 6dB
+
+                	COMPARE   AveSignalUSB, AGCuppthreshold	  ;or 18 or 9
+
                 CALL      NC, increaseAGC     ; signal slightly too big, increase attenuation by 1_5dB
 
                 COMPARE   AveSignalUSB, AGClowthreshold2	  ;
@@ -648,6 +658,22 @@ BackfromTransmitting: 	INPUT   s0, Command         ; Check if FIFO character pre
                 JUMP      AwaitAudioVal
 
 ; -------------This is end of main loop--------------------------------
+
+
+Receiving:	FETCH     s1, State
+		AND	s1,8 ;look at current state of 'receiving' bit.
+		COMPARE s1,8
+		JUMP Z,AwaitAudioVal	;Go back to start of loop if already acnowledged in receive mode
+		FETCH     s1, State
+		
+                OR        s1, 08
+                STORE     s1, State           ; set bit 3 (ie set state to 'receiving)
+
+;Now update AGC value
+To dooooooooooooo
+                JUMP      AwaitAudioVal
+                    
+
 
 ;Routine to take 16 bit value in s3,s2 and shift right by 5 to divide by 32 and leave value in s3,s2
 ;Assumes this is an unsigned numbers - normally used on a magnitude.

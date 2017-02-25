@@ -12,25 +12,28 @@ CONSTANT	count_1000_msb,			03                    ; upper 8-bits of 1000 count va
 CONSTANT	half_pi_LSB,			00                     ; 
 CONSTANT	half_pi_MSB,		 	40                    ; 360 degrees = $10000
 CONSTANT	phase_threshold,		30'd			;test for phase fairly constant
-CONSTANT	count_value_to_trig,		08'd			;if low phase 8 succesive times, then this is significant!
+CONSTANT	count_value_to_trig,		9'd			;if low phase 12 succesive times, then this is significant! - try to increase sensitivity (was 10)
 
 
 ;not sure about these (Aug2016)
 CONSTANT	audioTest,				2'd                   ; Frequency 2=800Hz, 3=1200Hz, 4=1.6kHz 7=2.8kHz
 
-;Frequency values for start and stop tones
-CONSTANT	StrtToneAInc,			9F
-CONSTANT	StrtToneBInc,			69
-CONSTANT	StopToneAInc,			5A
-CONSTANT	StopToneBInc,			78
+;Frequency values for start and stop tones (decrease all by 1 29/1/17)
+CONSTANT	StrtToneAInc,			9E
+CONSTANT	StrtToneBInc,			68
+CONSTANT	StopToneAInc,			59
+CONSTANT	StopToneBInc,			77
 
 
 
 ; Registers
 NAMEREG		sF, SampleCounter            ;
 NAMEREG		sE, TempScratchPointer
+NAMEREG		sD, Mode			;stores the operating mode: 0=idle, 1=Starting, 2=Receiving, 3=stopping, 4=TX
+NAMEREG		sC, SampleTimer		;This counter does not stop!
 
-; registers sA-sD are used for longish term storage...!
+
+; registers sA-sB are used for longish term storage...!
 ; sA used for cordic calcs 
 
 ; Scratch pad
@@ -42,12 +45,12 @@ NAMEREG		sE, TempScratchPointer
 ; Input port
 CONSTANT	AudioMSB,		0'd		;Not used?
 CONSTANT	AudioLSB,		1'd
-CONSTANT	Strobe,			2'd                   ; 	   bit0=8kHz square wave - the rest are now zeros
+CONSTANT	Strobe,			2'd                   ; 	   bit0=8kHz square wave - Bit 1 is TX_High
 CONSTANT	DemodMSB,		3'd                   ; Top significant byte of multiplier output
 CONSTANT	DemodLSB,		4'd                   ; (only 16 bits retained)
-
-CONSTANT	Status,			6'd				  ;TBdefined
-CONSTANT	TBD,			7'd				  ;TBdefined
+CONSTANT	TBD0,			5'd				  ;
+CONSTANT	TBD1,			6'd				  ;
+CONSTANT	TBD2,			7'd				  ;TBdefined
 
 
 
@@ -55,10 +58,12 @@ CONSTANT	TBD,			7'd				  ;TBdefined
 
 CONSTANT	CmdToUser,		0'd
 CONSTANT	LOMSB,			1'd
-CONSTANT	BRAMaddrMSB,		2'd
+CONSTANT	BRAMaddrMSB,		2'd		;Not currently used (Feb '17)
 CONSTANT	BRAMaddrLSB,		3'd
 ;also used:8,9,13,14,18,19,23,24 -  8 STRTA,13  STRTB ,18 STPA or 23  STPB, and 9 STRTA,14  STRTB ,19 STPA or 24  STPB
 ; 6,11,16,21 used for running Itone values and 7,12,17,22 for Qtone values
+CONSTANT	StartAmpOut,	25'd		;goes to DSP pico to calibrate AGC
+CONSTANT	State,		26'd		;Bit 0 enables speaker, Bit 1 is green light
 
 
 ; Scratchpad registers
@@ -75,18 +80,20 @@ CONSTANT	STRTAAccuDemodIMSB,	13'd	;This is the 16 bit value returned from the mu
 CONSTANT	STRTAAccuDemodILSB,	14'd	;Will this byte be used?
 CONSTANT	STRTAAccuDemodQMSB,	15'd	;This is th e 16 bit value of the demod component accumulated
 CONSTANT	STRTAAccuDemodQLSB,	16'd
-CONSTANT	STRTApreviousPhase,	17'd	;8 bit value of the previous phase determined by the cordic
-CONSTANT	STRTAcounter,	18'd		;Counter to determine number of succesive 8ms periods that delta phase is less than phasethreshold (reset to zero if not)	
-
+CONSTANT	STRTAcurrentPhase,	17'd	;8 bit value of the current phase determined by the cordic
+CONSTANT	STRTApreviousPhase,	18'd		;8 bit value of the previous phase determined by the cordic	
+CONSTANT	STRTAcounter,		19'd		;counts number of cycles of constant phase..
 CONSTANT	STRTBinc,	20'd
 ;etc
 CONSTANT	STPAinc,	30'd	
 
 CONSTANT	STPBinc,	40'd
-;uses up to Scratch register 49'd
 
-CONSTANT	SampleCounterMSB, 50'd		;So as to have a 16 bit sample counter
+;then second space at +40 from above numbers for another 4 tones
+;uses up to Scratch register 89'd
 
+CONSTANT	SampleCounterMSB, 90'd		;So as to have a 16 bit sample counter
+CONSTANT	StartAmpA,91'd			;Store the amplitude of the startA tone continuosly and output when whoopie.
 
 
 
@@ -119,7 +126,7 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
 		    LOAD      s0, StopToneBInc               ; Tone increments to detect
                     STORE     s0, STPBinc
                     
-
+		    CALL SpeakerOff
 
 
 ; Routine to look at lowest bit of Strobe to detect rising edge.
@@ -133,18 +140,22 @@ AwaitRise:          INPUT     s0, Strobe
                     JUMP      Z, AwaitRise        ; if 0 still, wait a bit more...
 ;Demod signal is not stable till ~6 clock cycles after rising edge, so should maybe use falling edge??
 ;so will be stable after ~3 instructions!
+		INPUT s0,Strobe		;To check if in TX mode
+		AND  s0,02			;look at bit 1
+		COMPARE s0,00
+		JUMP	Z,isReceiving	;TX_High not set
+		LOAD	Mode,04		;keep in TX mode
+        JUMP      Z, AwaitRise        ; keep looping
 		
 
-;		OUTPUT	SampleCounter,BRAMaddrLSB	;send to BRAM address and initiate write
+isReceiving: 		
+ 		ADD  SampleTimer,01		;Always increment timer in receive mode
+		COMPARE Mode,04
+		JUMP  NZ,StartDemod		;has not just come out of TX
+		LOAD Mode,00			;has just come out of TX, so reset mode to idle
 
- 		FETCH s0,SampleCounterMSB
-					
- 		ADD  SampleCounter,01	;increment counter
-		ADDCY   s0,00
-		STORE s0,SampleCounterMSB	;increment MSB
-		OUTPUT	s0,BRAMaddrMSB	;And send to BRAM address ready for LSB to be sent and initiate write
-				
- ;start treating StrtToneA
+
+;start treating StrtToneA
 StartDemod:	LOAD s0,STRTAinc  ;Note s0 is being used to point to the location of the values in scratch memory!
 		LOAD s1,00'd	;(counter value when mature)
 		CALL DemodulateTone  ;and checks if the accumulation has matured (from s1) and if so do cordic
@@ -166,7 +177,7 @@ StartDemod:	LOAD s0,STRTAinc  ;Note s0 is being used to point to the location of
 		LOAD s1,48'd	;(counter value when mature)
 		CALL DemodulateTone
 
-
+;add more tones to demodulate here for digital modes.
 
                 JUMP      AwaitAudioVal
 
@@ -214,11 +225,11 @@ DemodulateTone:		FETCH s2,(s0)	;Tone increment (pointed to in scratch by s0, to 
 			FETCH s6,(s0)	;MSB of Accumulated I demod value
 
 ;added this bit to get debug info
-			SUB  s0,01	;to get an even value!
-			SRA	s0	;divide by 2 to get 6,11,16 or 21
-			OUTPUT s6,(s0)	;Export intermediate I value
-			SLA	s0	;now get s0 back on track
-			ADD  s0,01	;add one to get back and another to advance to I LSB accu
+;			SUB  s0,01	;to get an even value!
+;			SRA	s0	;divide by 2 to get 6,11,16 or 21
+;			OUTPUT s6,(s0)	;Export intermediate I value
+;			SLA	s0	;now get s0 back on track
+;			ADD  s0,01	;add one to get back and another to advance to I LSB accu
 ;Would be ADD s0,01 instead of the above debug
 			ADD  s0,01	;add one to get back and another to advance to I LSB accu
 
@@ -250,11 +261,11 @@ DemodulateTone:		FETCH s2,(s0)	;Tone increment (pointed to in scratch by s0, to 
 			FETCH s6,(s0)	;MSB of Accumulated Q demod value
 
 ;added this bit to get debug info
-			SUB  s0,01	;to get an even value!
-			SRA	s0	;divide by 2 to get 7,12,17 or 22
-			OUTPUT s6,(s0)	;Export intermediate Q value
-			SLA	s0	;now get s0 back on track
-			ADD  s0,01	;add one to get back and another to advance to I LSB accu
+;			SUB  s0,01	;to get an even value!
+;			SRA	s0	;divide by 2 to get 7,12,17 or 22
+;
+;			SLA	s0	;now get s0 back on track
+;			ADD  s0,01	;add one to get back and another to advance to I LSB accu
 ;Would be ADD s0,01 instead of the above debug
 			ADD  s0,01	;add one to get back and another to advance to I LSB accu
 
@@ -268,10 +279,10 @@ DemodulateTone:		FETCH s2,(s0)	;Tone increment (pointed to in scratch by s0, to 
 			RETURN
 
 ;Checks s1 is mature
-CheckMatureAndOutput:	LOAD	s3,SampleCounter
+CheckMatureAndOutput:	LOAD	s3,SampleTimer	;Use the always incremented timer!
 			AND	s3,3f	;mod 64
 			COMPARE s3,s1
-			CALL Z,Matured	;OK to do cordic and output
+			CALL Z,Matured	;OK to do cordic and output - this will happen every 2ms (or every 1ms with 8 tones being decoded)
 
 			RETURN
 
@@ -286,20 +297,29 @@ Matured:		FETCH s1,(TempScratchPointer)	;pointer at MSB of I accumulated
 			FETCH s3,(TempScratchPointer)
 			ADD  TempScratchPointer,01 	;move pointer on to LSB of Q accumulated
 			FETCH s2,(TempScratchPointer)	;TempScratchPointer has now increased by 3
-;Add this bit to have a fixed known input to the cordic (but leave LSB variable)
-;			LOAD s1, 28
-;			LOAD s3, 28
-;end of bit to be removed
 			CALL cordic
 ;now have amplitude and phase in s0/s1(MSB AMP)...s4,s5(MSB Phase) - need to calculate phase change and output the MSBs
+;Use MSB amp in s1 - only interested in SartAmpA value - put in fixed scratch location if TempScratchPointer is +6,for this tone, ie is STRTAAccuDemodQLSB
+			COMPARE TempScratchPointer,STRTAAccuDemodQLSB	; are we treating StartToneA
+			JUMP NZ,CarryOn		;if not do not store in scratch
+			STORE s1,StartAmpA	;Save the current amplitude of the A tone
+
 ;have phase in s5
+CarryOn:		ADD TempScratchPointer,02
+			FETCH s4,(TempScratchPointer)			;get last phase (inc+8)
+			STORE s5,(TempScratchPointer)			;update current phase
+			SUB TempScratchPointer,01
+			STORE s4,(TempScratchPointer)			;update previous phase (inc+7)
+			SUB TempScratchPointer,01
+
+;Send to ARM
 			CALL StreamPhase				; This does not affect s5! - but does kill s0
-;			CALL Export2User	KILLS s5!		;send 2 ascii codes for the amplitude MSB to the user - NOTE THAT Export2User destroys the value of s5!
 			LOAD s5,s1
 			CALL StreamAmp
-;			CALL Export2User	KILLS s5!		;send ascii codes for the phase MSB to the user - NOTE THAT Export2User destroys the value of s5!
-;now needs to store the phase
+
+
 ;Need to reset accumulators to zero! (Tempscratch (originally inc+3) is now inc+6 but need to reseet addresses of original! TempScratchPointer, TempScratchPointer+1,+2 +3)
+;This is executed every 2ms if 4 tones are treated as executed 4 times per cycle - if more tones added, this will run more frequently and so counter timeouts will need adjusting!
 			LOAD s0,TempScratchPointer
 			LOAD s1,00
 			STORE s1,(s0)
@@ -309,58 +329,163 @@ Matured:		FETCH s1,(TempScratchPointer)	;pointer at MSB of I accumulated
 			STORE s1,(s0)
 			SUB  s0,01
 			STORE s1,(s0)
-
-
-			COMPARE TempScratchPointer,46	;STPBinc+6=46 is the pointer to the LSB of the Q accumulated value that of the stopB tone (ie the last one)
-			CALL Z,AddCRLF			;send end of line characters if treating last tone
-
-			RETURN		;TEMP until the phase constant code below is sorted out!
-;This last part to be corrected to check magnitude of phase shift
-			ADD  TempScratchPointer,01 	;move pointer on to previous phase
-			FETCH s2,(TempScratchPointer)	;s2 now has msb of previous phase
-			SUB  s2,s4			;delta phase (signed)
-			CALL absval			;gets absolute value of s2 (phase shift)
-			ADD  TempScratchPointer,01 	;move pointer on to counter
-			FETCH s1,(TempScratchPointer)	;s1 has the counter
-			ADD s1,01
-			STORE s1,(TempScratchPointer)	;now increment the counter
 			
+			CALL	CheckforTimeOuts
+			
+			COMPARE	Mode, 00
+			CALL	NZ,	IncrementCounter	;Unless Idle!
+
+
+
+			
+;This last part to be corrected to check magnitude of phase shift
+;OK ready to do now using software multiply
+
+;;;;;;;;;;;;;;;;;;			RETURN		;TEMP until the phase constant code below is sorted out!
+
+			ADD  TempScratchPointer,01 	;move pointer on to previous phase (inc+7)
+			FETCH s2,(TempScratchPointer)	;s2 now has msb of previous phase
+			ADD  TempScratchPointer,01 	;move pointer on to current phase (inc+8)
+			FETCH s3,(TempScratchPointer)	;s3 now has msb of current phase
+			
+			SUB  s2,s3			;delta phase (signed)
+			CALL absval			;gets absolute value of s2 (abs phase shift)
+			ADD  TempScratchPointer,01 	;move pointer on to counter (inc+9)
+			FETCH s1,(TempScratchPointer)	;s1 has the counter
+			LOAD s0,TempScratchPointer
+			SUB  s0,05	;to get inc+4
+			SRA	s0	;divide by 2 to get 7,12,17 or 22
+;
+
+			OUTPUT s1,(s0)	;Export Counter value come out on 'IQ stoptones', when value '5' is selected
+			SUB	s0,01	;to get 6,11,16,21 to align with 'IQStarttones' read by selecting '4' value
+			OUTPUT s2,(s0)	;Export phase difference value come out on 'IQ starttones', when value '4' is selected
+					
 			COMPARE s2,phase_threshold	;is it less than threshold, then set carry
-			CALL	NC,resetcounter		; if failed then reset the counter	
+			JUMP	NC,dropcounter		; if failed then drop the counter and return	
+			ADD s1,01			;otherwise is small phase shift so advance counter
+			STORE s1,(TempScratchPointer)	;now save the counter
 			
 			COMPARE s1,count_value_to_trig	;s1 has phase constant counter, carry not set if count is high enough.
-			CALL	Whoopie			;seem to have a tone here!
+			CALL	NC,Whoopie			;seem to have a tone here!
 			RETURN		
 
 ;Ultimately will use TempScratchPointer to work out which tone was detected
-Whoopie:		CALL	AddCRLF
-			LOAD s6,"Y"
-                        OUTPUT    s6, CmdToUser
-			LOAD s6,"E"
-                        OUTPUT    s6, CmdToUser
-			LOAD s6,"S"
-                        OUTPUT    s6, CmdToUser
-			LOAD s6,"!"
-                        OUTPUT    s6, CmdToUser
-			CALL	AddCRLF
+Whoopie:		COMPARE TempScratchPointer,19'd	;if start tone A counter
+			CALL  Z,isStrtToneA
+			COMPARE TempScratchPointer,29'd	;if start tone B counter
+			CALL  Z,isStrtToneB
+			COMPARE TempScratchPointer,39'd	;if start tone A counter
+			CALL  Z,isStopToneA
+			COMPARE TempScratchPointer,49'd	;if start tone A counter
+			CALL  Z,isStopToneB
+			
 			RETURN
 
 
-resetcounter:		LOAD s1,00
-			STORE s1,(TempScratchPointer)	;now set counter to zero
+dropcounter:		COMPARE s1,02
+			RETURN C 	;return if counter 1 or zero
+			SUB	s1,02	;drop counter by 2
+			STORE s1,(TempScratchPointer)	;now set counter to new value
+			RETURN
+
+
+;Update sample counter (increments every 2ms if treating all 4 tones simultaneously, would be 1ms if treating 8 tones)
+;This only advances in modes 1,2 and 3
+IncrementCounter:	FETCH s0,SampleCounterMSB
+					
+ 			ADD  SampleCounter,01	;increment counter
+			ADDCY   s0,00
+			STORE s0,SampleCounterMSB	;increment MSB on rollover
+;Check if any of the time outs are passed
+			CALL	CheckforTimeOuts
+			RETURN
+
+			
+			
+;Treat different mode cases
+;Mode 0 Idle
+;Mode 1 Starting 	(Start tone A detected)
+;Mode 2 Recieving Voice
+;Mode 3 Stopping
+;Mode 4 TX
+
+
+isStrtToneA:		COMPARE Mode,00		;Check if currently idle
+			RETURN	NZ		;Don't do anything if not currently idle
+			FETCH s0,StartAmpA	;Get thepreviously stored amplitude
+			OUTPUT s0,StartAmpOut	;and output to be read by the DSP Pico
+			LOAD Mode,01		;Move in to starting mode
+			LOAD SampleCounter,00
+			STORE SampleCounter,SampleCounterMSB	;Reset counter and allow about 160ms to receive tone B
+			RETURN
+
+isStrtToneB:		COMPARE Mode,01		;Check if in starting mode
+			RETURN	NZ		;Don't do anything if not starting
+			LOAD Mode,02		;go ahead in to receive
+			CALL SpeakerOn		;Turn on speaker
+			LOAD SampleCounter,00
+			STORE SampleCounter,SampleCounterMSB	;Reset counter and allow about 160ms to receive tone B
+			RETURN
+			
+isStopToneA:		COMPARE Mode,02		;Check if in RX mode
+			RETURN	NZ		;Don't do anything if not in RX
+			LOAD	Mode,03		;Move in to stopping mode
+			LOAD SampleCounter,00
+			STORE SampleCounter,SampleCounterMSB	;Reset counter and allow about 512ms to receive tone B
+			RETURN
+
+isStopToneB:		COMPARE Mode,03		;Check if in stopping mode
+			RETURN	NZ		;Don't do anything if not stopping
+			LOAD Mode,00		;go back to idle
+			CALL SpeakerOff		;Turn speaker off
+			LOAD SampleCounter,00
+			STORE SampleCounter,SampleCounterMSB	;Reset counter (not really needed, but just for tidiness)
 			RETURN
 
 
 
+;timeout values in units of 2ms - this will drop to 1ms if more tones added, so timeout values will need re-adjusting
+CheckforTimeOuts:		COMPARE Mode,01
+				CALL	Z,checkStarttoneAtimeout
+				COMPARE Mode,02
+				CALL	Z,checkRXtimeout
+				COMPARE Mode,03
+				CALL	Z,checkStoptoneAtimeout
+				RETURN
+
+checkStarttoneAtimeout:		COMPARE SampleCounter,80'd		;This will need to be 160'd with 8 tones
+				RETURN	C	;Counter<80 (160ms) so OK
+				LOAD	Mode,00	;Set mode back to idle - tone B was not received in time
+				RETURN
+
+checkRXtimeout:			FETCH s0,SampleCounterMSB	;Get counter
+				COMPARE s0,61'd	;-about 30 secs - COmpare with 122'd if using 8 tones
+				RETURN 	C	;Can carry on listening (not timed out)
+				LOAD	Mode,00	;Set mode back to idle - seems to have been transmitting too long
+				CALL	SpeakerOff	;on stop speaker again
+				RETURN
 
 
-;Takes I in s0(LSB)and s1(MSB) and Q in s2,s3 and returns the amplitude in s0,s1 and the phase in s4,s5. s8 is the loop counter
-; Useable range is for I and Q up to about +/-$3000	
-;Get registers loaded with I & Q values for cordic
+checkStoptoneAtimeout:		FETCH s0,SampleCounterMSB	;Get counter
+				COMPARE s0,01	;-about 512ms - need to compare with 02 if using 8 tones
+				RETURN	C	;Counter MSB still 0 so within 512ms of receiving StoptoneB
+				LOAD	Mode,02	;Set mode back to RX - tone B was not received in time so must have been a chance tone
+				RETURN
 
+			
 
-
-
+SpeakerOn:			LOAD	s0,01
+				OUTPUT s0,State
+				RETURN
+				
+SpeakerOff:			LOAD	s0,02		;Turns Green LED off (bit 1)? and stops speaker (currently driven directly off not speaker enable)
+				OUTPUT s0,State
+				LOAD	Mode,00		;return to idle state
+				
+				RETURN
+				
+				
 ;Does 16 bit signed accumulation of 8 bit signed value in s1 into s4/s5 which are recoverred from scratch pad pointed to by s2 (loading here the offset to the actual tone
 ;dependent on how many times round the loop we are)
 DoAccumulate:	 ADD   s2,s6
@@ -682,5 +807,36 @@ wait_1us:           SUB       s0, 01
                     RETURN       
 ; 
 ; 
-
+; Multiplier Routine (8-bit x 8-bit = 16-bit product) - Ken Chapman
+ ; ==================================================
+ ; Shift and add algorithm
+ ;
+mult_8x8:
+ 	NAMEREG s0, multiplicand 	; preserved
+ 	NAMEREG s1, multiplier 		; preserved
+ 	NAMEREG s2, bit_mask 		; modified
+ 	NAMEREG s3, result_msb 		; most-significant byte (MSB) of result,
+					; modified
+ 	NAMEREG s4, result_lsb 		; least-significant byte (LSB) of result,
+					; modified
+ 					;
+ 	LOAD bit_mask, 01 		; start with least-significant bit (lsb)
+ 	LOAD result_msb, 00 		; clear product MSB
+ 	LOAD result_lsb, 00 		; clear product LSB (not required)
+ 					;
+ 					; loop through all bits in multiplier 
+mult_loop: TEST multiplier, bit_mask 	; check if bit is set
+ 	JUMP Z, no_add 			; if bit is not set, skip addition
+ 					;
+ 	ADD result_msb, multiplicand 	; addition only occurs in MSB
+ 					;
+no_add: SRA result_msb 			; shift MSB right, CARRY into bit 7,
+					; lsb into CARRY
+ 	SRA result_lsb 			; shift LSB right,
+					; lsb from result_msb into bit 7
+ 					;
+ 	SL0 bit_mask 			; shift bit_mask left to examine
+					; next bit in multiplier
+ 					;
+ 	JUMP NZ, mult_loop 		; if all bit examined, then bit_mask = 0
 
