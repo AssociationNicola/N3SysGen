@@ -1,4 +1,4 @@
-;  To add code to take into account amplitude of start tone detected to adjust AGC
+;GV0B  To add code to take into account amplitude of start tone detected to adjust AGC
 ;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
 ;GV06 increase SSB amplitude on TX
 ;GV03 corrected OutAmp doubling and increased speaker volume
@@ -134,7 +134,7 @@ CONSTANT	BTaudioLSB,		7'd                   ;
 CONSTANT	RAMdataMSB,		8'd					  ;Data from variable storage RAM
 CONSTANT	RAMdataLSB,		9'd
 CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone, bit 2 is TX_high, bit 3 is speaker on (from tone detect)
-CONSTANT	StartToneAmp		11'd
+CONSTANT	StartToneAmp,		11'd
 
 
 
@@ -166,15 +166,15 @@ CONSTANT	AudioFreqLSB,		14'd
 CONSTANT	AudioPhaseMSB,		15'd
 CONSTANT	AudioPhaseLSB,		16'd
 CONSTANT	EnableSpeaker,		17'd
-CONSTANT	MUXport,			18'd 			  ;New port to drive AGC MUX
+CONSTANT	MUXport,			18'd 			  ;New port to drive AGC MUX (middle 4 bits)- called AGCvalue in Sysgen model
 CONSTANT	StartToneA,			19'd
-CONSTANT	StartToneALong,		20'd
+CONSTANT	StartToneALong,			20'd
 CONSTANT	StartToneB,			21'd
-CONSTANT	StartToneBLong,		22'd
+CONSTANT	StartToneBLong,			22'd
 CONSTANT	StopToneA,			23'd
-CONSTANT	StopToneALong,		24'd
-CONSTANT	StopToneB,			25'd
-CONSTANT	StopToneBLong,		26'd
+CONSTANT	AveSignalUSBport,			24'd
+CONSTANT	AveSignalMSBport,			25'd
+CONSTANT	AveSignalLSBport,			26'd
 
 CONSTANT	MSBBTAudio,			27'd
 CONSTANT	LSBBTAudio,			28'd
@@ -214,67 +214,10 @@ CONSTANT	HistoryStart42,		112'd                 ; 2 bytes per historical sample 
 CONSTANT	AGCvalueTX,			112'd
 CONSTANT	AGCvalueRX,			113'd
 CONSTANT	AGCcounter,			114'd 			 	;store counter 0 to 255 to only perform AGC calc every 1 in 4 audio samples and sinewave increment every 8 samples
-CONSTANT	UARTBitshift,		115'd
 
-;Register values for tone detection part
-CONSTANT	AveStrtToneAMSB_I,		116'd
-CONSTANT	AveStrtToneALSB_I,		117'd
-CONSTANT	AveStrtToneBMSB_I,		118'd
-CONSTANT	AveStrtToneBLSB_I,		119'd
-
-CONSTANT	AveStopToneAMSB_I,		120'd
-CONSTANT	AveStopToneALSB_I,		121'd
-CONSTANT	AveStopToneBMSB_I,		122'd
-CONSTANT	AveStopToneBLSB_I,		123'd
-
-CONSTANT	LongAveStrtToneAMSB_I,	124'd
-CONSTANT	LongAveStrtToneALSB_I,	125'd
-CONSTANT	LongAveStrtToneBMSB_I,	126'd
-CONSTANT	LongAveStrtToneBLSB_I,	127'd
-
-CONSTANT	LongAveStopToneAMSB_I,	128'd
-CONSTANT	LongAveStopToneALSB_I,	129'd
-CONSTANT	LongAveStopToneBMSB_I,	130'd
-CONSTANT	LongAveStopToneBLSB_I,	131'd
-
-CONSTANT	AveStrtToneAMSB_Q,		132'd
-CONSTANT	AveStrtToneALSB_Q,		133'd
-CONSTANT	AveStrtToneBMSB_Q,		134'd
-CONSTANT	AveStrtToneBLSB_Q,		135'd
-
-CONSTANT	AveStopToneAMSB_Q,		136'd
-CONSTANT	AveStopToneALSB_Q,		137'd
-CONSTANT	AveStopToneBMSB_Q,		138'd
-CONSTANT	AveStopToneBLSB_Q,		139'd
-
-CONSTANT	LongAveStrtToneAMSB_Q,	140'd
-CONSTANT	LongAveStrtToneALSB_Q,	141'd
-CONSTANT	LongAveStrtToneBMSB_Q,	142'd
-CONSTANT	LongAveStrtToneBLSB_Q,	143'd
-
-CONSTANT	LongAveStopToneAMSB_Q,	144'd
-CONSTANT	LongAveStopToneALSB_Q,	145'd
-CONSTANT	LongAveStopToneBMSB_Q,	146'd
-CONSTANT	LongAveStopToneBLSB_Q,	147'd
-
-;Pointers for tones in sinewave - use 4 bits for actual ptr in scratchpad (bottom 2bits of MSB and top 2 bits of LSB)
-CONSTANT	StrtToneAPtrMSB,		148'd
-CONSTANT	StrtToneAPtrLSB,		149'd
-CONSTANT	StrtToneBPtrMSB,		150'd
-CONSTANT	StrtToneBPtrLSB,		151'd
-
-CONSTANT	StopToneAPtrMSB,		152'd
-CONSTANT	StopToneAPtrLSB,		153'd
-CONSTANT	StopToneBPtrMSB,		154'd
-CONSTANT	StopToneBPtrLSB,		155'd
-
-CONSTANT	FirstToneInc,			156'd   ;4 Locations to store tone increments (actually there are 4 unused registers here as well)
-CONSTANT	FirstToneInc02,			158'd   ;4 Locations to store tone increments (actually there are 4 unused registers here as well)
-CONSTANT	FirstToneInc04,			160'd   ;4 Locations to store tone increments (actually there are 4 unused registers here as well)
-CONSTANT	FirstToneInc06,			162'd   ;4 Locations to store tone increments (actually there are 4 unused registers here as well)
-
-CONSTANT	NormalisedMagMSB,		164'd   ;Absolute value of current signal
-CONSTANT	NormalisedMagLSB,		165'd   ;Absolute value of current signal
+;Removed Tone related scratchregisters
+CONSTANT	NormalisedMagMSB,		115'd   ;Absolute value of current signal
+CONSTANT	NormalisedMagLSB,		116'd   ;Absolute value of current signal
 
 
 ;GenerateCode        MEM       "S3eDSPprog.mem"
@@ -307,16 +250,6 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
                     STORE	  s0,AGCvalueTX		
                     LOAD	  s0,63'd
                     STORE	  s0,AGCvalueRX		;set to low value for RX
-
-
-; LOAD      s1, 30'd
-; LOAD      s0, 0
-; diracload:          STORE     s0, s1
-; ADD       s1, 1
-; COMP      s1, 69'd
-; JUMP      NZ, diracload
-; LOAD      s0, 75'd
-; STORE     s0, 69'd
 
 
 ;Sinewave table: Step through this 1 in 8 loops to give 62.5Hz sinewave on transmission
@@ -360,14 +293,6 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
      ;               STORE     s0, 48'd
       ;              LOAD      s0, 0'd               ; etc
        ;             STORE     s0, 49'd
-	   				 LOAD      s0,StrtToneAInc
-	   				 STORE	   s0,FirstToneInc
-	   				 LOAD      s0,StrtToneBInc
-	   				 STORE	   s0,FirstToneInc02
-	   				 LOAD      s0,StopToneAInc
-	   				 STORE	   s0,FirstToneInc04
-	   				 LOAD      s0,StopToneBInc
-	   				 STORE	   s0,FirstToneInc06
 
 
 
@@ -393,14 +318,7 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
                     LOAD	  s0,63'd				  ;Start with hig attenuation (max 63) value for external AGC MUX version
                     STORE     s0, AGCvalue		  ;maybe start with 16 (was 8)?
                     LOAD      AveSignalUSB, AGCInitial   ; set signal averager to moderate level
-;                    LOAD      AveSignalUSB, AGClowthreshold       ; set signal averager to moderate level
-;                    ADD       AveSignalUSB, AGCuppthreshold       ; set signal averager to moderate level
-;					SR0       AveSignalUSB
-;                    LOAD	  BaselineMSB,0
 
-
-; routine to take signal in s0,s1,s2 (MSB-LSB) and return 16bit signal in s0,s1 using AGC and volume settings
-; TO DOOOOOOOOOOOO
 
 
 ; Routine to look at lowest bit of Strobe to detect rising edge.
@@ -417,44 +335,6 @@ AwaitRise:          INPUT     s0, Strobe
 
  					INPUT     s0, AudioLSB	   ; Now have the new value (different addresses from before!)
  					INPUT 	  s1,AudioMSB
-; 					INPUT 	  s2,AudioUSB	   ;not when using external MUX for AGC
- 					
- 					
- 					
-;					OUTPUT     s1,Data2archiveLSB 	  	  		  ;This is received demodulated data - normally s0
-;					OUTPUT     s2,Data2archiveMSB
- 					
- 					
-; Temp sine wave simulation
-;Display demodulated values always:
-;					OUTPUT     s1,Data2archiveLSB
-;					OUTPUT     s2,Data2archiveMSB
-  	   			 		
-;                    ADD       SineCtr, audioTest
- ;                   COMP      SineCtr, 50'd         ; should be 50 with sine wave - extend to 70 for dirac!
-  ;                  JUMP      C, contsine         ; skip over if still below 50
-   ;                 SUB      SineCtr, 20'd  ; reset counter back to start (1 period)
-   					 
-;contsine:           FETCH     s1, SineCtr         ; put value of sine from table into AudioMSB
- ;                   LOAD      s2, 0
-  ;                  LOAD	   s0,0
-   ;                 COMP      s1, 128             ; but is sine negative?
-    ;                JUMP      C, skipneg
-     ;               LOAD      s2, 255             ; interpret as negative number
-;skipneg:
-
-
-
-; now apply volume setting
-; FETCH     s3, VolSetting
-; CALL      AGC
-
-;This part allows insertion of UART streamed values on RX and transmit - removed in GV42
-;	  	            FETCH  	  s3,State
-;					AND		  s3,4
-;					COMP	  s3,4	 	 		  ;is this stream mode
-;					CALL	  Z,GetUartValues
-;_____________________________________________________________											
 
 
 
@@ -468,14 +348,6 @@ AwaitRise:          INPUT     s0, Strobe
 
 
                     
-;_______________Add Jan 2013 to increase volume without clipping____________Sept 2015 Not during transmit!
-; 							CALL	AudioDouble
-; 							CALL	AudioDouble		   ;increase volume 12 dB!
-
-;_____________________________________________________________________________
-
-
-
 ;Now check if we are transmitting this value!
 
                     FETCH     s2, State
@@ -486,26 +358,7 @@ AwaitRise:          INPUT     s0, Strobe
 
 
 
-; This section will only be performed in receive mode
 
-
-; Perform volume adjustment here **********To Be Done************************				
-;  		  		 			SL0	 	s0
- ; 		  		 			SLA		s1		  ;double received signal to speaker
-;  		  		 			SL0	 	s0
- ; 		  		 			SLA		s1		  ;further double received signal to speaker BUT removed 31/12/12 as was clipping with AGC thresholds set
- 
-; 							CALL	AudioDouble		   ;increase volume another 6 dB on receive! - removed 28/5/13
-
-;_______________________________
-;Test value by sending out to Uart - shift this section as required - but check s3 not used! Removed for GV42 and GV45
-;				   LOAD     s3, s1
-					
-;				   SRX	  s3
-;	                    OUT       s3, CmdToUser	  	;Send receive signal in 7 bits (divide by 2!) to user pico to send to UART
-;__________________________________
-
- 
  
 		 				    OUTPUT    s1, MSBAudio	   
           					    OUTPUT    s0, LSBAudio
@@ -527,29 +380,20 @@ AwaitRise:          INPUT     s0, Strobe
 							SLA		s0				  ;shift top bit into carry
 							ADDCY	s1,00			  ;s1 now rounded value of upper 8 bits (but s0 wasted!)
 					
-;Disable for the moment!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-;							CALL	  AverageToneDemod ;Maybe stuck due to scratchpad not being 256 extended
-
                    
 
 ; Check if there is a command from the User, return here with JUMP command from TransmitAudio macro
-BackfromTransmitting: 	INPUT   s0, Command         ; Check if FIFO character present
-						COMPARE s0, 128'd             ; is there a character?
-						CALL      C, Respond2Fifo
+BackfromTransmitting: 		INPUT   s0, Command         ; Check if FIFO character present
+				COMPARE s0, 128'd             ; is there a character?
+				CALL      C, Respond2Fifo
 
 
 
 ; Accumulate magnitude
 ;__________________________________________________________________________________________
-;Only do this 1 in 4 (8) times -add this part to Pete's Jan 2013 code - should give 1s time constant on AGC to try and reduce gain ramping up during quiet speech parts
-	  	 	  	   FETCH   s3,AGCcounter
-	  	 	  	   ADD	   s3,01
-	  	 	  	   STORE   s3,AGCcounter
-;	  	 	  	   AND	   s3,3			;take only lowest 2 bits
-;	  	 	  	   COMP	   s3,0	;skip 4 times (default 8?)
- ;                   JUMP   NZ,AwaitAudioVal  ;if not 8th time then go back to start
-;                    LOAD   s3,0   Don't need to do this as lowest 2 bits are already zero
-;	  	 	  	   STORE   s3,AGCcounter
+	  	 	  	FETCH   s3,AGCcounter
+	  	 	  	ADD	   s3,01
+	  	 	  	STORE   s3,AGCcounter
  	 	  	
 ;NOW do it every time!
 ;_____________________________________________________________________________________________
@@ -594,32 +438,13 @@ BackfromTransmitting: 	INPUT   s0, Command         ; Check if FIFO character pre
                     
 
 
-; Accumulate signed value - try to get DC offset - but apparently not used
-; Add 1/256 x abs(new normalised value)
-;                    FETCH      s3, NormalisedSignalMSB
- ;                   LOAD      s4, 0
-  ;                  COMP      s3, 128
-   ;                 JUMP      C, ispos1           ; the signal is positive
-    ;                LOAD      s4, $FF             ; in case accum signed value is negative (which it could well be!!!
-;ispos1:             ADD       BaselineLSB, s3
- ;                   ADDC      BaselineMSB, s4
-
-; now subtract 1/256of current baseline value
-;                    LOAD      s3, BaselineMSB
-  ;                  LOAD      s4, 0
- ;                   COMP      s3, 128
-   ;                 JUMP      C, ispos2           ; the accumulated value is positive
-    ;                LOAD      s4, $FF             ; in case accum signed value is negative (which it could well be!!!
-;ispos2:             SUB       BaselineLSB, s3
- ;                   SUBC      BaselineMSB, s4
-
-;TEMP DISPLAY of AveSignalMSB!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+;Output AveSignalMSB to PS
 			LOAD	s3,AveSignalUSB		   ;AveSignalMSB is actually a register!
-			OUTPUT	s3,StopToneALong
+			OUTPUT	s3,AveSignalUSBport
 			LOAD	s3,AveSignalMSB		   ;AveSignalMSB is actually a register!
-			OUTPUT	s3,StopToneB
+			OUTPUT	s3,AveSignalMSBport
 			LOAD	s3,AveSignalLSB		   ;AveSignalMSB is actually a register!
-			OUTPUT	s3,StopToneBLong
+			OUTPUT	s3,AveSignalLSBport
 
 
 	 		FETCH   s3, AGCvalue
@@ -630,13 +455,14 @@ BackfromTransmitting: 	INPUT   s0, Command         ; Check if FIFO character pre
  
 ;Don't do this if Speaker is ON - ie is receiving a message, but on first time that Speaker on is high do a correction of AGCvalue
 			INPUT	s0,Status
-			AND	s0,8		;Look at speaker on bit
-			COMPARE s0,8
+			AND	s0,08		;Look at speaker on bit
+			COMPARE s0,08
 			JUMP Z,Receiving	;Jump out if is receiving
 
+;So now adjust AGCvalue while in TX or speaker not on
 
   	  		COMPARE   AveSignalUSB, AGCuppthreshold4	  ;Is really big? ie at threshold or above
-                	CALL      NC, increaseAGC4     ; signal too big, increase attenuation by 12dB
+            CALL      NC, increaseAGC4     ; signal too big, increase attenuation by 12dB
 
   	  		COMPARE   AveSignalUSB, AGCuppthreshold2	  ;Is pretty big
                 	CALL      NC, increaseAGC2     ; signal too big, increase attenuation by 6dB
@@ -661,17 +487,65 @@ BackfromTransmitting: 	INPUT   s0, Command         ; Check if FIFO character pre
 
 
 Receiving:	FETCH     s1, State
-		AND	s1,8 ;look at current state of 'receiving' bit.
-		COMPARE s1,8
-		JUMP Z,AwaitAudioVal	;Go back to start of loop if already acnowledged in receive mode
-		FETCH     s1, State
+			AND	      s1,08 ;look at current state of 'receiving' bit.
+			COMPARE   s1,08
+			JUMP      Z,AwaitAudioVal	;Go back to start of loop if already acnowledged in receive mode
+			FETCH     s1, State
 		
-                OR        s1, 08
-                STORE     s1, State           ; set bit 3 (ie set state to 'receiving)
+            OR        s1, 08
+            STORE     s1, State           ; set bit 3 (ie set state to 'receiving)
 
 ;Now update AGC value
-To dooooooooooooo
-                JUMP      AwaitAudioVal
+;First check if received tone is too strong and need to increase attenuation
+			FETCH s3, AGCvalue
+			INPUT	s1,StartToneAmp
+			COMPARE s1,36'd		;is it 36 of bigger (ie 1.5dB above target value of 30)
+			CALL	NC,increaseAGC
+			COMPARE s1,43'd		;is it 43 of bigger 
+			CALL	NC,increaseAGC
+			COMPARE s1,51'd		;is it 51 of bigger 
+			CALL	NC,increaseAGC
+			COMPARE s1,61'd		;is it 61 of bigger 
+			CALL	NC,increaseAGC
+			COMPARE s1,72'd		;is it 72 of bigger 
+			CALL	NC,increaseAGC
+			COMPARE s1,85'd		;is it 85 of bigger 
+			CALL	NC,increaseAGC
+			COMPARE s1,101'd		;is it 101 of bigger
+			CALL	NC,increaseAGC
+			COMPARE s1,121'd		;is it 121 of bigger
+			CALL	NC,increaseAGC
+			COMPARE s1,143'd		;is it 143 of bigger 
+			CALL	NC,increaseAGC
+			COMPARE s1,170'd		;is it 170 of bigger 
+			CALL	NC,increaseAGC
+			COMPARE s1,202'd		;is it 202 of bigger
+			CALL	NC,increaseAGC
+			COMPARE s1,241'd		;is it 241 of bigger
+			CALL	NC,increaseAGC
+			
+			COMPARE s1,26'd		;is it less than 26 (ie 1.5dB below target value of 30)
+			CALL	C,decreaseAGC
+			COMPARE s1,22'd		;is it less than 22 
+			CALL	C,decreaseAGC
+			COMPARE s1,18'd		;is it less than 18 
+			CALL	C,decreaseAGC
+			COMPARE s1,15'd		;is it less than 15 
+			CALL	C,decreaseAGC
+			COMPARE s1,13'd		;is it less than 13 
+			CALL	C,decreaseAGC
+			COMPARE s1,11'd		;is it less than 11 
+			CALL	C,decreaseAGC
+			COMPARE s1,9'd		;is it less than 9 
+			CALL	C,decreaseAGC
+			COMPARE s1,8'd		;is it less than 8 
+			CALL	C,decreaseAGC
+
+
+;Now updata AGCvalue
+			STORE s3, AGCvalue
+			
+             JUMP      AwaitAudioVal
                     
 
 
@@ -691,291 +565,6 @@ Divide4:   SR0		s3
 		   RETURN		
 
 
-;Dont need the following (21/1/17)
-;SpeakerOn:		 LOAD 	s1,01
-;				 OUTPUT s1,EnableSpeaker
-;		 		 RETURN
-;		 		 
-;SpeakerOff:		RETURN	 				 ;Disable for the moment
-;				LOAD 	s1,00
-;				OUTPUT	s1,EnableSpeaker
-;		 		 		
-;		 		RETURN
-		 		 
-;Routines to average I and Q demodulated tone signals
-;Check the amplitude of the demodulated and averaged signals compared to long average - AGCcounter==0 can be used to top up long average
-;s7 used to note if LO is negative
-;Enter with received signal MSB in s1 and try and keep in s8!
-;first accumulate short and long averages of all tones I and Q
-;AverageToneDemod:	 LOAD s8,s1
-;				 LOAD s6,00		   ;This will be used to count through 4 tones in the loop below
-				 
-;DemodLoop:		 LOAD s5,StrtToneAPtrLSB 	  ;value of LSB of pointer to Scratchpad element for TonePtrs
-;				 ADD  s5,s6				;Move up to ptr being treated
-;				 FETCH s0,(s5)			;the tone pointer for the LSB should now be in s0
-;				 LOAD  s2,FirstToneInc	;Scratch address for StrtToneAInc
-;				 ADD   s2,s6
-;				 FETCH s4,(s2)			;Get StrtToneAInc in s4 etc...
-;				 SUB   s5,01				;Back 1 index to MSB
-;				 FETCH s1,(s5)			;the sinewave pointer for the MSB should now be in s1				
-;				 ADD  s0,s4				;Increment LSB!!
-;				 ADDCY s1,00				;Add carry to MSB 	  ->This is OK as increment is positive	  	  	  		 	 	   					 	  	 	
-;				 STORE s1, (s5)			;Value of MSB of sinewave pointer has been incremented in scratch pad
-;				 ADD  s5,01
-;				 STORE s0, (s5)			;Value of LSB of pointer has been incremented in scratch pad
-;;now rotate 16 bit pointer to get 4 bits used to address the sinewave values
-;				 SL0   s0
-;				 SLA   s1
-;				 SL0   s0
-;				 SLA   s1
-;				 AND   s1,0F			;keep lowest 4 bits to have pointer to one of 16 sinewave values
-;				 LOAD  s9,s1
-;				 FETCH s3,(s9)		  ;get sinewave at ptr value in s9 and put in s3
-;				 CALL  MultSigByLO
-;				 
-;				 
-;				 
-;				 
-;				 
-;Now need to accumulate demodulated I value which is in s1:
-;
-;
-;;value to accumulate is in s1
-;	   	        LOAD s2, AveStrtToneALSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
-;	   	        CALL 	DoAccumulate
-;	   	         
-;
-;
-;;Now treat Q_LO value
-;
-;				ADD   s9,04			  ;add 1/4 period
-;				AND   s9,0F			;keep lowest 4 bits to have pointer to one of 16 cosinewave values
-;				FETCH s3,(s9)			  ;get cosinewave at ptr value in s9 and put in s3
-;				CALL  MultSigByLO
-;				
-;; accumulate demodulated Q value which is in s1:
-;
-;
-;	   	        LOAD s2, AveStrtToneALSB_Q
-;				CALL 	DoAccumulate
-;	   	         	
-;	            FETCH  s0,AGCcounter
-;	            COMPARE   s0,00
-;	            CALL   Z,DolongAve
-;	
-;;now check for end of looping
-;				 ADD   	s6,02	 			  ;next tone
-;				 COMPARE s6,08
-;				 JUMP NZ, DemodLoop		  ;loop if more tones to demodulate
-;
-;;Now check amplitude of demodulated signals
-;	 	        FETCH	s3,AveStrtToneAMSB_I
-;	 	        CALL	absval				;Get the magnitude
-;	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
-;	 	        FETCH	s3,AveStrtToneAMSB_Q
-;	 			CALL	absval				;Get the magnitude
-;	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
-;	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
-;;				SR0	s0					;Divide by 2 again
-;;				SR0	s0					;Divide by 2 again - increase gain by further 4
-;	 	
-;	 	        FETCH	s3,LongAveStrtToneAMSB_I
-;	 	        CALL	absval				;Get the magnitude
-;	 	        LOAD	s1,s3				;Abs value of ToneA_I in s1
-;	 	        FETCH	s3,LongAveStrtToneAMSB_Q
-;	 			CALL	absval				;Get the magnitude
-;	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s1
-;	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
-;;Now s1 has long term average level and s0 has short term average value of start tone A (but 4 times smaller)
-;				OUTPUT	s0,StartToneA
-;				OUTPUT	s1,StartToneALong
-;			
-;	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
-;	 			CALL  C,SpeakerOn
-;
-;	 	        FETCH	s3,AveStrtToneBMSB_I
-;	 	        CALL	absval				;Get the magnitude
-;	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
-;	 	        FETCH	s3,AveStrtToneBMSB_Q
-;	 			CALL	absval				;Get the magnitude
-;	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
-;	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
-;;				SR0	s0					;Divide by 2 again
-;;				SR0	s0					;Divide by 2 again
-;	 	
-;	 	        FETCH	s3,LongAveStrtToneBMSB_I
-;	 	        CALL	absval				;Get the magnitude
-;	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
-;	 	        FETCH	s3,LongAveStrtToneBMSB_Q
-;	 			CALL	absval				;Get the magnitude
-;	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
-;	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
-;;Now s1 has long term average level and s0 has short term average value of start tone B (but 4 times smaller)
-;				OUTPUT	s0,StartToneB
-;				OUTPUT	s1,StartToneBLong
-;
-;	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
-;	 			CALL  C,SpeakerOn
-;
-;	 	        FETCH	s3,AveStopToneAMSB_I
-;	 	        CALL	absval				;Get the magnitude
-;	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
-;	 	        FETCH	s3,AveStopToneAMSB_Q
-;	 			CALL	absval				;Get the magnitude
-;	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
-;	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
-;;				SR0	s0					;Divide by 2 again
-;;				SR0	s0					;Divide by 2 again
-;	 	
-;	 	        FETCH	s3,LongAveStopToneAMSB_I
-;	 	        CALL	absval				;Get the magnitude
-;	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
-;	 	        FETCH	s3,LongAveStopToneAMSB_Q
-;	 			CALL	absval				;Get the magnitude
-;	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
-;	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
-;;Now s1 has long term average level and s0 has short term average value of stop tone A (but 4 times smaller)
-;
-;
-;;				OUTPUT	s0,StopToneA
-;
-;;	Moved earlier			LOAD	s3,AveSignalMSB		   ;AveSignalMSB is actually a register!
-;;				OUTPUT	s3,StopToneALong
-;				
-;;				OUTPUT	s1,StopToneALong
-;
-;	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
-;	 			CALL  C,SpeakerOff
-;
-;	 	        FETCH	s3,AveStopToneBMSB_I
-;	 	        CALL	absval				;Get the magnitude
-;	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
-;	 	        FETCH	s3,AveStopToneBMSB_Q
-;	 			CALL	absval				;Get the magnitude
-;	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
-;	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
-;;				SR0	s0					;Divide by 2 again
-;;				SR0	s0					;Divide by 2 again
-;	 	
-;	 	        FETCH	s3,LongAveStopToneBMSB_I
-;	 	        CALL	absval				;Get the magnitude
-;	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
-;	 	        FETCH	s3,LongAveStopToneBMSB_Q
-;	 			CALL	absval				;Get the magnitude
-;	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
-;	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
-;;Now s1 has long term average level and s0 has short term average value of stop tone B (but 4 times smaller)
-;;				OUTPUT	s0,StopToneB
-;	;			OUTPUT	s1,StopToneBLong
-;
-;	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
-;	 			CALL  C,SpeakerOff
-;	 	
-;				
-;				RETURN				
-;
-
-;Does 16 bit signed accumulation of 8 bit signed value in s1 into s4/s5 which are recoverred from scratch pad pointed to by s2 (loading here the offset to the actual tone
-;dependent on how many times round the loop we are)
-;DoAccumulate:	 ADD   s2,s6
-;				 FETCH s4,(s2)			;Now Get AveSToneLSB_Is in s4 etc...
-;				 SUB   s2,01				;step back to MSB
-;				 FETCH s5,(s2)			;Get AveSToneMSB_Is in s5
-;				 LOAD  s3,FF			;Assume s1 is negative and use s3 for sign extension
-;				 COMPARE  s1,128'd			;if s1 is 128 or bigger, then it is negative (carry not set)
-;				 JUMP  NC,negaccum
-;				 LOAD  s3,00		  		;sign extend with zeros
-;negaccum:		 ADD   s4,s1			;Accumulate into averageLsB
-;				 ADDCY s5,s3				;do carry to add into upper byte (keeping carry from previous add!!)
-;				 LOAD  s0,s5
-;				 SRX   s0
-;				 SRX   s0					;reduce value to subtract by factor 4 to increase integration time constant and gain.	
-;				 ADDCY s0,00					;round up if necessary 		   	  		
-;				 SUB   s4,s0
-;				 LOAD  s3,FF			;Assume s5 is negative and use s3 for sign extension				
-;				 COMPARE  s5,128'd				;is this a negative number?
-;				 JUMP  NC,negdecrmnt
-;				 LOAD  s3,00					;do this if s5 is positive (sign extension)
-;negdecrmnt:		 SUB   s4,s0
-;				 SUBCY s5,s3				;subtract 1/256						
-;				 STORE s5,(s2)
-;				 ADD   s2,01				;move down to LSB again
-;				 STORE s4,(s2)			;update scratchpad values   	
-;				 RETURN
-;
-;
-;
-;
-;
-;;Routine to do LO_I and LO_Q multiplications - LO value in s3 (enter with s3) and signal in s1 (recoverred here from s8) -> result in s1
-;MultSigByLO:	COMPARE  s3,128'd
-;				JUMP  NC, LOisNeg		  ;Jump out if sinewave val is negative
-;BackFromLOPos:	LOAD  s7,00				  ;LO is not negative
-;	
-;BackFromLONeg:	LOAD  	s1,s8		  ;stick signal value back in s1
-;				COMPARE  s3,04				  ;This is the ABSOLUTE value of the LO
-;				CALL  	Z,MultiplyBy4
-;				COMPARE  s3,03				  ;This is the ABSOLUTE value of the LO
-;				CALL  	Z,MultiplyBy3
-;				COMPARE  s3,02				  ;This is the ABSOLUTE value of the LO
-;				CALL  	Z,MultiplyBy2
-;				 
-;				 ;if abs(LO)=1  do nothing
-;				
-;				 COMPARE  s7,01		  ;was the LO value negative?
-;				 RETURN  NZ		  ;return if positive
-;				 CALL  invertval	 ;invert sign of s1 if negative
-;				 RETURN
-;
-;
-;
-;Routine every 256 cycles to update longer average
-;DolongAve:	    LOAD s2, AveStrtToneAMSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
-;				ADD   s2,s6
-;				FETCH s1,(s2)			;Now Get AveSToneMSB_Is in s1 etc...
-;				ADD s2,01
-;				FETCH s0,(s2)			;Now Get AveSToneLSB_Is in s0 etc...
-;				SLA s0
-;				ADDCY s1,00     ;should now be rounded correctly
-;				
-;				LOAD s2, LongAveStrtToneALSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
-;				CALL 	DoAccumulate
-;
-;				LOAD s2, AveStrtToneAMSB_Q	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
-;				ADD   s2,s6
-;				FETCH s1,(s2)			;Now Get AveSToneMSB_Qs in s1 etc...
-;				ADD s2,01
-;				FETCH s0,(s2)			;Now Get AveSToneLSB_Qs in s0 etc...
-;				SLA s0
-;				ADDCY s1,00     ;should now be rounded correctly
-;				
-;	   	        LOAD s2, LongAveStrtToneALSB_Q
-;				CALL 	DoAccumulate
-;
-
-;		  	   	RETURN
-
-
-;This inverts the sign of the LO sinewave to be positive, but notes this in a flag to take into account.
-;LOisNeg:		 LOAD s7,01	  ;This means LO is negative
-;				 CALL makeposval
-;
-;				 JUMP  BackFromLONeg
-;				
-
-;Multiplies value of s1 by 4 (SL0 X2)
-;MultiplyBy4:	SL0 s1
-;				SL0 s1
-;				RETURN
-;
-;MultiplyBy2:	SL0 s1
-;				RETURN
-;
-;MultiplyBy3:	LOAD s4,s1
-;				SL0 s1
-;				ADD	s1,s4
-;				RETURN
-;
 
 
 ;This routine aims to double the signed analogue value in s0,s1 by finding sign of the value and doubling if small, increasing magnitude by 32 if less than 95 but more than 32 then limiting to 127 if more than 95
@@ -1168,21 +757,6 @@ invertval:	  		LOAD      s4, 00
                     RETURN
 
 
-;Adds small amplitude roughly sinewave at 62.5Hz - not used (was to be used to add a sub-audio tone continuously)
-;ADDsinewave:		  FETCH	  s2,AGCcounter
-;					  AND	  s2,7
-;					  COMP     s2,0
-;					  JUMP	   NZ,constsinectr
-;					  ADD	   sinectr,1
-;					  COMP	   sinectr, endsine+1
-;					  JUMP	   NZ,constsinectr
-;					  LOAD	   sinectr,startsine
-;constsinectr:		  FETCH	   s3,sinectr					
-;					  ADD	   s1,s3						;and hope it doesn't overflow!
-					
-					
-					
-;					  RET
 
 
 ;Feb 2013 icrease number of AGC steps factor 2 and another factor 2 July 2013 (now granularity 1.5dB)
@@ -1251,13 +825,13 @@ AGC:   				INPUT 	s2,Status
 				COMPARE s2,04	 ;True if BT signal present and TX_high
 					
 				RETURN Z   ;Don't do anything if on BT and TX_high
-	   	   	
+	   	   	        OUTPUT		  s3,MUXport		  ;Now simply use middle 4 bits to drive the MUX (or 'AGCvalue' in sysgen model) (this had been lower in the program and used the lowest bits)
+	   		   	
 				SRX		  s3   	 			  ;divide s3 by 2 to get last AGC and put last bit into carry
 				CALL	  C,decrease1_5dB		  ;if last bit set then reduce by 3dB
 				SRX		  s3   	 			  ;divide s3 by 2 to get old AGC and put last bit into carry
 				CALL	  C,decrease3dB		  ;if last bit set then reduce by 3dB
 
-	   		   	OUTPUT		  s3,MUXport		  ;Now simply use remaining 4 bits to drive the MUX
 	   		   	RETURN
                     
 ;AGCloop:            COMPARE      s3, 00

@@ -1,4 +1,5 @@
-;GV?? first tone detect
+;GV0B Tone detect working - getting AGC adjust to work thrugh DSP
+;GV?? first tone detect 
 
 
 
@@ -357,7 +358,7 @@ CarryOn:		ADD TempScratchPointer,02
 			SRA	s0	;divide by 2 to get 7,12,17 or 22
 ;
 
-			OUTPUT s1,(s0)	;Export Counter value come out on 'IQ stoptones', when value '5' is selected
+			OUTPUT s1,(s0)	;Export Counter value come out on 'IQ stoptones', when value '5' is selected 
 			SUB	s0,01	;to get 6,11,16,21 to align with 'IQStarttones' read by selecting '4' value
 			OUTPUT s2,(s0)	;Export phase difference value come out on 'IQ starttones', when value '4' is selected
 					
