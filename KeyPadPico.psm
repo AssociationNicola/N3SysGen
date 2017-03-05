@@ -12,16 +12,6 @@
 ; 
 ; KeyPad routine for SSB picoblaze
 ;
-CONSTANT	LCD_RS,			1'd                   ; bit0 - Register Select - command(0) or data(1)
-CONSTANT	LCD_RW,			2'd                   ; bit1 - read(1) or write(0)
-CONSTANT	LCD_E,			4'd                   ; bit2 - Enable(1)
-
-
-; Registers
-NAMEREG sF, LCD_data		;            EQU       sF                  ; registers used for data and control of LCD
-NAMEREG	sE, LCD_control		;         EQU       sE                  ; E=bit2,  R/W=bit1,  RS=bit0
-NAMEREG	sD, cursor_position	;     EQU       sD                  ; register to define cursor position on LCD display
-;sB and sC also used for temporary character storage
 
 
 
@@ -33,7 +23,7 @@ CONSTANT	count_1000_msb,				03                  ; hex upper 8-bits of 1000 count
 
 ; Input port - port numbering changed June 11
 CONSTANT	Command,				0'd                   ; From main pico
-CONSTANT	PTT,			1'd					  ;This is PTT
+CONSTANT	PTT,			1'd					  ;This is PTT and default frequency in bits 1 and 2
 CONSTANT	RAMdataInLSB,			2'd
 CONSTANT	RAMdataInMSB,			3'd
 CONSTANT	KP2userbufferFull,		4'd					  ;Bit 0 KP2User buffer full, Bit 1 Touch counter running
@@ -110,7 +100,12 @@ CONSTANT	RX_F_LSB,				6'd
 CONSTANT	Freq2Set,				7'd		 ; values 0 nothing to set, 1>Hy, 2>N2, 3>N3 (31kHz)
 
 
-
+CONSTANT	PreviousKeyState,		10		; 16d
+CONSTANT	PreviousPTTState,		11		; 17d
+CONSTANT    KEYS_PRESSED,           12      ; 18d
+CONSTANT    KeyPressTimer,			13      ; 19d
+CONSTANT    KeyPressFast,			14      ; 20d
+CONSTANT    KeyPressFastLeadIn,		15      ; 20d
 
 
 
@@ -118,37 +113,37 @@ CONSTANT	Freq2Set,				7'd		 ; values 0 nothing to set, 1>Hy, 2>N2, 3>N3 (31kHz)
 
 
 
- cold_start:      	CALL      LCD_setup
+ cold_start:      
 					
-welcome_message:    CALL      LCD_home             ; left hand of display
-                    LOAD      LCD_data, 78'd       ; character_N
-                    CALL      LCD_character_write
-;                    LOAD      LCD_data, character_i
- ;                   CALL      LCD_character_write
-  ;                  LOAD      LCD_data, character_c
-   ;                 CALL      LCD_character_write
-    ;                LOAD      LCD_data, character_o
-     ;               CALL      LCD_character_write
-      ;              LOAD      LCD_data, character_l
-       ;             CALL      LCD_character_write
-        ;            LOAD      LCD_data, character_a
-         ;           CALL      LCD_character_write
-     ;               LOAD      LCD_data, character_space
-      ;              CALL      LCD_character_write
-                    LOAD      LCD_data, "3"
-					CALL      LCD_character_write
-                    LOAD      LCD_data, " "
-                    CALL      LCD_character_write
+welcome_message:    
                     
 initialise:			LOAD	  s0,00				 ;This is now used to drive LatchOn which latches the device on!!
 					OUTPUT    s0,LatchOn	 ;Latch On if 1
 					
+					STORE     s0, PreviousKeyState	; initial state
+					STORE     s0, PreviousPTTState	; initial state
+					STORE	  s0, KEYS_PRESSED
+					STORE	  s0, KeyPressTimer
+					STORE	  s0, KeyPressFast
+
+
+					CALL	  delay_1s		 	;Wait so it doesn't detect as turn off
+
+
+					;LOAD      s5, "&"			; key event flag
+					;OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					
+					;FETCH	  s5, KEYS_PRESSED	; get the keys pressed mask
+					;ADD  	  s5, "P"			; convert to appropriate character for key on
+					;OUTPUT    s5, CmdToUser		; write to user pico and onto ARM		
+
 					
 ;set values for Hey by default
-					INPUT	  s0,PTT 	;This is PTT but also has set default frequency bits
+
+					INPUT	  s0,PTT 	;This is PTT but also has set default frequency bits in bits 1 and 2
 		    	 		SR0	s0
 					AND	s0,03		
-;					LOAD   	s0,01		 ;use 1 for Hey, 2 for N2 freq, 3 for 37kHz
+		;			LOAD   	s0,01		 ;use 1 for Hey, 2 for N2 freq, 3 for 37kHz
 	 				STORE 	s0,Freq2Set
 					CALL	UpdateFreqRegisters
 
@@ -165,111 +160,176 @@ initialise:			LOAD	  s0,00				 ;This is now used to drive LatchOn which latches 
 					CALL	  delay_1s		 	;Wait so it doesn't detect as turn off!
 					CALL	  delay_1s		 	;Wait so it doesn't detect as turn off!
 					
-										
 					
-loop:				INPUT     s0, Command		  ;Check if FIFO character present
+loop:
+
+					CALL	  delay_50msecs			; period between checks
+					;CALL	  delay_1s		 	;Wait so it doesn't detect as turn off!
+
+					INPUT     s0, Command		  ;Check if FIFO character present
                     COMPARE   s0, 128'd           ; is there a character?
                     CALL      C, Respond2Fifo	  ;this should now receive value of mode from user pico and display on LCD
                     
-                    INPUT	  s1,TouchSignal2
-                    AND 	  s1,0F
-                    COMPARE	  s1,0F			;bits go to zero if pressed
-                    CALL	  NZ,KeyPressed
-
-
-;;;;;;;;;;;;;Bit added to check touch switch - re-enable June 2013
-;					LOAD	  s1,02
-;					OUTPUT    s1,ChooseTouchKey
-;					LOAD	  s5,00
-;StayWaiting:		INPUT 	  s0,KP2userbufferFull
-;					ADD	     s5,01
-;					AND	     s0,02
-;					COMPARE  s0,02
-;					JUMP     Z,StayWaiting
+                    INPUT	  s1,TouchSignal2		; read the keys touched register
 					
-;                    LOAD	  cursor_position,14'd	;position cursor at end of line   -Add this to get keypad level
- ;                   CALL	  LCD_position_cursor
+					XOR		  s1, FF				; invert so ON is a 1
+                    AND 	  s1,0F					; mask to the key press bits
+					
+					
+					;LOAD      s5, "&"			; key event flag
+					;OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					
+					;LOAD      s5, s1
+					;ADD  	  s5, "@"			; convert to appropriate character for key on
+					;ADD  	  s5, 60			; temp should get a through h
+					;OUTPUT    s5, CmdToUser		; write to user pico and onto ARM		
 
-;                    INPUT	  s5,Touchsignal2
- ;                   CALL	  Displays5
+					
+					
+					;JUMP      CheckPTT
+					
+					
+					
+					
+					FETCH	  s5, PreviousKeyState	; get last key pressed state					
+					COMPARE   s1, s5
+					
+					;JUMP      Z, CheckPTT      ; skip if input state not changed
+					JUMP      Z, KeyNotChanged      ; skip if input state not changed
+
+                    STORE     s1, PreviousKeyState	; remember new state
+					
+					FETCH	  s5, KEYS_PRESSED	; get the keys pressed mask
+					OR        s5, s1            ; remember which keys have been pressed
+					STORE     s5, KEYS_PRESSED	; remember new state
+					
+					COMPARE   s1, 00                ; are there any keys pressed now?
+					JUMP      nz, KeyNotChanged     ; skip if keys still pressed
+					;JUMP      nz, CheckPTT          ; skip if keys still pressed
+					
+					LOAD      s5, "&"			; key event flag
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					
+					FETCH	  s5, KEYS_PRESSED	; get the keys pressed mask
+					ADD  	  s5, "@"			; convert to appropriate character
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM		
+
+					
+					;#define KEY_UP		'H'		// up = 08	
+					;#define KEY_DOWN	'D'		// down = 04	
+					;#define KEY_RIGHT	'B'		// right = 02
+					;#define KEY_LEFT	'A'		// left = 01
+
+					;#define KEY_UPLEFT 'I'		// 08 + 01	
+
+					;#define KEY_PTT_ON		'0'
+					;#define KEY_PTT_OFF	'1'
+
+					LOAD		s0, 00				; reset the keys pressed
+					STORE	  s0, KEYS_PRESSED
+					STORE	  s0, KeyPressTimer
+					STORE	  s0, KeyPressFast
+					STORE	  s0, KeyPressFastLeadIn
+
+					
+					JUMP		CheckPTT
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+KeyNotChanged:
 
-                    INPUT	  s1,PTT 	;This is PTT
-		    AND		  s1,01		;Mask lowest bit
-                    COMPARE	  s1,00			;0 if pressed - logic on proto2 is inverted
-                    JUMP	  Z,TouchDown
-                    
-;think touch is not pressed
-NotTouchDown:		CALL	  delay_100ms
-					INPUT	  s1,PTT
-			AND		  s1,01		;Mask lowest bit
-                    
-                    COMPARE	  s1,00			;check if pressed logic on proto2 is inverted
-                    JUMP	  Z,loop		;so is in fact pressed so escape
-                    LOAD	  cursor_position,04	;position cursor just after 'Nicola 3'
-                    CALL	  LCD_position_cursor
-                    LOAD	  s5,"r"			 ; character_r	 		  ;temp - shoulr be r !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-					LOAD      LCD_data, s5		 ;
+					;;; check for key pressed for a period and tell ARM if so
+				
+					FETCH	  s1, KEYS_PRESSED	; get the keys pressed mask
+					COMPARE   s1, 00             ; any keys pressed
+					JUMP      Z, CheckPTT       ; if not then do not time
+					
+					FETCH     s2, KeyPressFast  ; has key been pressed a while?
+					COMPARE   s2, 00             ;
+					JUMP      z, SlowPress      ; skip if slow presses
+					
+FastPress:
+					FETCH		s2, KeyPressTimer
+					ADD			s2, 01			; increment by approx loop time (50 milli sec?)
+					STORE		s2, KeyPressTimer
+					AND         s2, 07			; if key pressed for .3 secs approx (32 ticks)
+					JUMP        nz, CheckPTT    ; if not then no message
+					
+					JUMP        SlowPressSend
+					
+SlowPress:
+					FETCH		s2, KeyPressTimer
+					ADD			s2, 01			; increment by approx loop time (50 milli sec?)
+					STORE		s2, KeyPressTimer
+					AND         s2, 0F			; if key pressed for 1.5 secs approx (32 ticks)
+					
+					JUMP        nz, CheckPTT    ; if not then no message
+					
+SlowPressSend:
+					LOAD      s5, "&"			; key event flag
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					
+					FETCH	  s5, KEYS_PRESSED	; get the keys pressed mask
+					ADD  	  s5, "P"			; convert to appropriate character for key on
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM		
+
+					FETCH		s2, KeyPressFastLeadIn
+					ADD			s2, 01			; increment by approx loop time (50 milli sec?)
+					STORE		s2, KeyPressFastLeadIn
+					
+					COMPARE     s2, 04           ; approx 2 seconds?
+					JUMP        NZ, CheckPTT    ; keep slow presses till then
+					
+					STORE		s2, KeyPressFast    ; start fast key press
+					
+
+					;;; now check PTT
+CheckPTT:
+                    INPUT	  s1,PTT 	;Read PTT register
+					AND		  s1,01		;Mask lowest bit
+					
+					FETCH     s5, PreviousPTTState
+					COMPARE   s1, s5        ; has it changed
+					
+					JUMP	Z, loop			; loop back if not
+
+					STORE     s1, PreviousPTTState
+					
+					; send PTT state - 
+					;		0 = PTT pressed   1 = PTT released
+					
+					LOAD	  s5, "&"
 					OUTPUT    s5, CmdToUser
-                    CALL      LCD_character_write		;then write to LCD
-					JUMP	  loop
+					ADD		  s1, "0"		; PTT pressed = '0'; PTT released = '1'
+					OUTPUT    s1, CmdToUser
+					
+					;COMPARE    s1, 00 ; debug
+					;JUMP       Z, PTTOFF ; debug
+					
+					
+					; debug 					LOAD	  s5, "r"
+					; debug 					OUTPUT    s5, CmdToUser
+					
+					
+                    JUMP	  loop
+;PTTOFF:
+					; debug 					LOAD	  s5, "t"
+					; debug 					OUTPUT    s5, CmdToUser
+					
+					
+ ;                   JUMP	  loop
 
-;believe touch to be pressed
-TouchDown:			CALL	  delay_100ms
-					INPUT	  s1,PTT
-			AND		  s1,01		;Mask lowest bit
-                    
-                    COMPARE	  s1,00			;logic on proto2 is inverted
-                    JUMP	  NZ,loop		;so is not in fact pressed - escape
-					LOAD	  cursor_position,04	;position cursor just after 'Nicola 3'
-                    CALL	  LCD_position_cursor
-                    LOAD	  s5, "t"		; character_t
-					LOAD      LCD_data, s5		 ;
-					OUTPUT    s5, CmdToUser
-                    CALL      LCD_character_write		;then write to LCD
-					JUMP	  loop
-
-
-
-KeyPressed:			CALL	  delay_1s
+					CALL	  delay_1s
 					INPUT	 s5,TouchSignal2
 					AND 	s5,0F
 
 					COMPARE	  s5,0F			;not $F if pressed
                     RETURN	  Z				;return if key not still pressed
                     
-					LOAD	cursor_position, C3	;position cursor
-                    CALL	LCD_position_cursor
-                    LOAD 	sB," "			; character_space
-                    LOAD 	sC," "			; character_space
-;TouchSignal2=0E is On, 0D = Select, 0B = Down, 07= Up
-					COMPARE s5,07
-					CALL 	Z,upFreq
-					COMPARE s5,0B
-					CALL 	Z,DownFreq ;These should reload LCD_data and sC with characters representing code of Freq, N3 etc
-					
-;					LOAD	  LCD_data,sB
-;					CALL      LCD_character_write		;then write 1st char to LCD
-;					LOAD	  LCD_data,sC
-;					CALL      LCD_character_write		;then write 2nd to LCD
-					
-					
-					COMPARE	 	s5,0D
-					CALL 		Z,UpdateFreqRegisters
-					
-					COMPARE		 s5,0E
+
 					CALL 		Z,TurnOff
 					
-;and use DispAntennaInput for setting antenna input
 
-	 	 			COMPARE		s5,05		  ;Up+select
-					CALL 		Z,SetLoop
-					COMPARE		s5,09	  	  ;Down+select
-					CALL 		Z,SetEarth
-					
-					RETURN
 					
 ;Note key pad bits are: bit3 = On, bit 2 = up, bit 1 = select, bit 0 = down
 
@@ -300,10 +360,7 @@ CheckWhichFreq:				COMPARE  	s0,00
 					CALL  		Z,SetN2Freq
 					COMPARE  	s0,03
 					CALL  		Z,SetN3_31Freq
-					LOAD 		LCD_data,sB
-					CALL      	LCD_character_write		;then write to LCD
-					LOAD 		LCD_data,sC
-					CALL      	LCD_character_write		;then write to LCD
+
 					
 					
 					RETURN     
@@ -336,10 +393,16 @@ SetHeyphoneFreq:	                LOAD	  s1,0e
 					STORE	  s1,RX_F_MSB
 					LOAD	  s1,4F
 					STORE	  s1,RX_F_LSB
-					LOAD	  sB,"h"		; character_h
-					LOAD	  sC,"y"		; character_y
+					;LOAD	  sB,"h"		; character_h
+					;LOAD	  sC,"y"		; character_y
+					
+					LOAD      s5, "&"			; key event flag
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					LOAD      s5, "w"			; key event flag
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
 					
 					RETURN
+					
 
 ;For N3 5565 (15BD) TX and  45032 (AFE8) RX with 32.768MHz!
 SetN2Freq:			        LOAD	  s1,0e
@@ -372,190 +435,68 @@ SetN3_31Freq:		                LOAD	  s1,05
 
 
 					
-UpdateFreqRegisters:			LOAD	  cursor_position, C6	;position cursor
-                    			CALL	  LCD_position_cursor
+UpdateFreqRegisters:			
 
-					
-					LOAD      LCD_data, "f"				; character_f		 ;
-					CALL      LCD_character_write		;then write to LCD
-					LOAD      LCD_data, "="				; character_equals
-					CALL      LCD_character_write		;then write to LCD
+					;CALL  		SetHeyphoneFreq				;set Hy freq and return
 					
 					FETCH s0,Freq2Set
 					
 					CALL	  CheckWhichFreq
+
 					CALL	  SetTxFreq
 					CALL	  SetRxFreq
 
 					RETURN
 
 
-SetLoop:				LOAD	  s8,"l"		; character_l
-					LOAD	  s9,"o"		; character_o
-					LOAD	  sA,"o"		; character_o
-					
-					LOAD	  sB,"p"		; character_p
-					LOAD	  sC," "		; character_space
-					
-					JUMP DispAntennaInput
-					
-SetEarth:				LOAD	  s8,"e"		; character_e
-					LOAD	  s9,"a"		; character_a
-					LOAD	  sA,"r"		; character_r
-					
-					LOAD	  sB,"t"		; character_t
-					LOAD	  sC,"h"		; character_h
-				
 
-
-;To use
-DispAntennaInput: 	LOAD	  cursor_position,CB	;position cursor near end of second line
-                    CALL	  LCD_position_cursor
-					LOAD 	  LCD_data,s8
-					CALL      LCD_character_write		;then write to LCD
-					OUTPUT    s8, CmdToUser				;First letter is used to inform userpico whether loop or earth
-					LOAD 	  LCD_data,s9
-					CALL      LCD_character_write		;then write to LCD
-					LOAD 	  LCD_data,sA
-					CALL      LCD_character_write		;then write to LCD
-					LOAD  	  LCD_data,sB
-					CALL      LCD_character_write		;then write to LCD
-					LOAD      LCD_data,sC
-					CALL      LCD_character_write		;then write to LCD
-					
-					RETURN				
-
-
-
-;displays s5
-Displays5:				CALL	  Byte2Chars
-                    			LOAD      LCD_data, s6		 ;
-					CALL      LCD_character_write		;then write to LCD
-					LOAD      LCD_data, s7		 ;
-					CALL      LCD_character_write		;then write to LCD
-					RETURN			
-
-
-					
+	
 
 
 
 ;Get fifo command and act on it. Echo ascii value to LCD
 Respond2Fifo:				;CALL	LCD_cursor_back
+					CALL	GetFifoChar
+
+Respond2FifoW:
+					INPUT     s0, Command		  ;Check if FIFO character present
+                    COMPARE   s0, 128'd           ; is there a character?
+                    JUMP      NC, Respond2FifoW	  ;this should now receive value of mode from user pico and display on LCD
+
 					
 					CALL	GetFifoChar
+					
+					COMPARE	s0, "Z"		  ; Z = turn off					
+					CALL 		Z,TurnOff
+
+					COMPARE	s0, "y"		  ; y - turn on LCD					
+					CALL 		Z,TurnLCDOn
+
+					COMPARE	s0, "Y"		  ; Y - turn off LCD					
+					CALL 		Z,TurnLCDOff
+
 					
 					COMPARE	s0,04		  ;character T (request for info from userpico) ->LESS TOP BIT WHICH IS NOT SENT!
 					CALL	Z,SendParamBack
-;					COMPARE	s0,03		  ;character S (request for info from userpico)
-;					CALL	Z,Select
-					COMPARE	s0,7F		  ;Is this the start of a signal readout (ie another 2 values expected) -LESS TOP BIT WHICH IS NOT SENT!
-					JUMP	Z,Display2   ; No revert to original!! ----move cursor and return
+
 					RETURN
 
-;Display character in s0
-;Display_s0:					LOAD	s5,s0		  			  ;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!temporary to check beacon mode
-;					CALL	  Byte2Chars  			
-;		  			LOAD      LCD_data, s6		 ;This should display at the end of the line ie characters 12,13
-;					CALL      LCD_character_write		;then write to LCD
-;					LOAD      LCD_data, s7		 ;
-;					CALL      LCD_character_write		;then write to LCD
-					
-;					RETURN
-					
-;This is not currently called
-Display8:			LOAD	  cursor_position, 07	;position cursor just after touch value
-                    CALL	  LCD_position_cursor
-                    
-                    CALL	  GetFifoChar
-					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
-					CALL      LCD_character_write		;then write to LCD
-					
-                    CALL	  GetFifoChar
-					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
-					CALL      LCD_character_write		;then write to LCD
-					
-                    CALL	  GetFifoChar
-					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
-					CALL      LCD_character_write		;then write to LCD
-					
-                    CALL	  GetFifoChar
-					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
-					CALL      LCD_character_write		;then write to LCD
-					
-                    CALL	  GetFifoChar
-					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
-					CALL      LCD_character_write		;then write to LCD
-					
-                    CALL	  GetFifoChar
-					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
-					CALL      LCD_character_write		;then write to LCD
-					
-                    CALL	  GetFifoChar
-					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
-					CALL      LCD_character_write		;then write to LCD
-					
-                    CALL	  GetFifoChar
-					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
-					CALL      LCD_character_write		;then write to LCD
-					
-					
+TurnLCDOn:
+					LOAD	s0, 01
+					OUTPUT	s0, LCDcontrast	 	;
+
 					RETURN
-
 					
-;Set cursor position back to 7 and display 2 decimal values from fifo followed by locally available values
-Display2:			LOAD	  cursor_position, 07	;position cursor just after touch value
-                    CALL	  LCD_position_cursor
-                    CALL	GetFifoChar
-                    LOAD 	s5,s0
-                    CALL	GetChar	   			 ;Added this Sep 2014 to extend display of first digit
-;                    ADD       s0, 48              ; offset to Ascii code for '0'
-					LOAD      LCD_data, s5		 ; Write character from GetChar
-					CALL      LCD_character_write		;then write to LCD
-					CALL	GetFifoChar
+TurnLCDOff:
+					LOAD	s0, 00
+					OUTPUT	s0, LCDcontrast	 	;
 
-                    ADD       s0, 48'd            ; offset to Ascii code for '0'
-   					LOAD      LCD_data, s0		 ;
-					CALL      LCD_character_write		;then write to LCD
-
+					RETURN
+					
+					
 ; Added code to display ADC and demod peak values
 					
-					LOAD	  cursor_position, 10'd					;position cursor
-                    CALL	  LCD_position_cursor
 
-					INPUT	 	s5,ADCpeak
-					
-					CALL		 Displays5
-
-					LOAD      	LCD_data, " "			 ;character_space		 ;
-					CALL      	LCD_character_write		;then write to LCD
-					
-					
-					INPUT		 s5,DemodPeak				;will also reset the peak value
-					CALL		 Displays5
-					
-;This is the part that displays the signal amplitudes - disable for th emoment (Jan 2016) to allow normal display...					
-;					LOAD	  	cursor_position, C0	;position cursor
- ;                   CALL	  	LCD_position_cursor
-
-	;				INPUT	 	 s5,StartToneA					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StartToneALong					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StartToneB					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StartToneBLong					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StopToneA					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StopToneALong					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StopToneB					
-	;				CALL		 Displays5
-	;				INPUT		 s5,StopToneBLong					
-	;				CALL		 Displays5
-					
-					
 
                     RETURN
 					
@@ -677,162 +618,6 @@ is_0_9:             ADD       s5, 10'd            ; return to range 0-9
 
 
 
-; LCD driver routines courtesy Ken Chapman Xilinx.
-
-
-; Send space to the LCD display
-;
-;
-; Registers used LCD_data, LCD_control, s0 and s1.
-;
-LCD_space:          LOAD      LCD_data, " "			; character_space
-                    CALL      LCD_character_write
-                    RETURN
-;
-
-;
-; These are for a 20x4 character module
-;
-;
-; Initialise LCD display or clear LCD display
-;
-;
-; Registers used LCD_data, LCD_control, s0, s1, s2, s3, s4 and s5.
-;
-LCD_setup:          CALL      delay_1s            ; delay to allow LCD to be ready after power up
-                    LOAD      LCD_data, 56'd        ; function set, 8-bit, 2-line, 5x7 dot format
-                    CALL      LCD_control_write
-                    CALL      delay_1ms           ; wait >4.1ms
-                    CALL      delay_1ms
-                    CALL      delay_1ms
-                    CALL      delay_1ms
-                    CALL      delay_1ms
-                    CALL      LCD_control_write   ; repeat function set
-                    CALL      delay_1s            ; wait >100us
-                    CALL      LCD_control_write   ; repeat function set
-                    CALL      LCD_control_write   ; repeat function set
-                    LOAD      LCD_data, 6'd       ; Entry mode, increment by 1, no shift
-                    CALL      LCD_control_write
-                    LOAD      LCD_data, 14'd      ; Display, on, cursur on, no blink cursor
-                    CALL      LCD_control_write
-LCD_clear:          LOAD      LCD_data, 1'd       ; clear display
-                    CALL      LCD_control_write
-                    CALL      delay_1ms           ; wait >1.64ms
-                    CALL      delay_1ms
-                    CALL      delay_1ms
-                    
-                    LOAD	  s0,40					; hex
-                    OUTPUT	  s0,LCDcontrast	  	;*************************set default contrast
-                    
-                    RETURN
-;
-
-
-; Send cursor to ‘home’
-LCD_home:           LOAD      LCD_data, 02
-                    CALL      LCD_control_write
-                    CALL      delay_1ms
-; CALL      delay_1ms
-                    RETURN
-;
-
-; Turn Back-light on (assuming bit 3 of the control port is connected to the LCD
-; backlight), uses LCD_control.
-LCD_light_on:       OR        LCD_control, 08
-                    OUTPUT    LCD_control, LCD_control_port
-                    RETURN
-;
-
-; Turn Back-light off (assuming bit 3 of the control port is connected to the LCD
-; backlight), uses LCD_control.
-LCD_light_off:      AND       LCD_control, 07
-                    OUTPUT    LCD_control, LCD_control_port
-                    RETURN
-;
-
-
-; Move cursor to start of line 2
-; Uses LCD_data, LCD_control, s0 and s1.
-LCD_line_2:         LOAD      LCD_data, C0
-                    CALL      LCD_control_write
-                    CALL      delay_1ms
-                    RETURN
-;
-
-
-
-; Advance cursur right
-; Uses LCD_data, LCD_control, s0 and s1.
-LCD_cursor_advance: LOAD      LCD_data, 14'd
-                    CALL      LCD_control_write
-                    CALL      delay_1ms
-                    RETURN
-;
-
-; Moves cursur left (back one)
-; Uses LCD_data, LCD_control, s0 and s1.
-LCD_cursor_back:    LOAD      LCD_data, 10'd
-                    CALL      LCD_control_write
-                    CALL      delay_1ms
-                    RETURN
-;
-
-
-
-
-
-
-; Set cursor on LCD display based on value in register 'cursor_position'
-;
-; There are 20 character positions with the following addresses on the first line
-; position         1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
-; cursor_position 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13
-; address         80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f 90 91 92 93
-; line 2 address	  c0 c1 c2 .....
-; other lines have other values…..
-; Writing characters auto increments the address, but note that
-;
-;
-; Registers used cursor_position, LCD_data, LCD_control, s0 and s1.
-; Horinzontal position in lower 4-5 bits, line in bit 6
-LCD_position_cursor: OR       cursor_position, 80; set  MSB to address LCD memmory
-                    LOAD      LCD_data, cursor_position
-                    CALL      LCD_control_write   ; write address to LCD control
-                    RETURN
-;
-
-
-
-
-; Write to LCD with control data provided in register called LCD_data
-; Registers used LCD_data, LCD_control, s0 and s1.
-;
-LCD_control_write:  OUTPUT    LCD_data, LCD_data_port; output data
-                    AND       LCD_control, 04      ; R/W=0,  RS=0
-                    CALL      LCD_enable_pulse    ; enable pulse
-                    RETURN
-;
-; Write to LCD with character data provided in register called LCD_data
-;
-; Registers used LCD_data, LCD_control, s0 and s1.
-;
-LCD_character_write: OUTPUT   LCD_data, LCD_data_port; output data
-                    OR        LCD_control, 01      ; R/W=0,  RS=1
-                    CALL      LCD_enable_pulse    ; enable pulse
-                    RETURN
-;
-; Registers used LCD_control, s0 and s1.
-;
-LCD_enable_pulse:   OR        LCD_control, LCD_E  ; set enable bit (E=1)
-                    OUTPUT    LCD_control, LCD_control_port
-                    CALL      delay_1us           ; ensure E pulse width > 230ns
-                    XOR       LCD_control, LCD_E  ; reset enable bit (E=0)
-                    OUTPUT    LCD_control, LCD_control_port;
-                    CALL      delay_50us          ; >40us delay
-                    CALL      delay_50us          ; >40us delay - to make sure!
-                    RETURN
-;
-
 
 ; Registers used s0, s1, s2, s3, s4 and s5.
 ; 
@@ -861,11 +646,15 @@ delay_200ms:        CALL      delay_100ms
 ; 
 ; Registers used s0, s1, s2, s3 and s4.
 ; 
+delay_50msecs:      LOAD      s4, 32             ; repeat 1ms delay 100 times
+					JUMP      wait_100ms
 delay_100ms:        LOAD      s4, 64             ; repeat 1ms delay 100 times
 wait_100ms:         CALL      delay_1ms
                     SUB       s4, 01
                     JUMP      NZ, wait_100ms
-                    RETURN       
+                    RETURN 
+
+
 ; 
 ; Delay of approximately 1ms required by LCD display
 ; 
