@@ -1,3 +1,4 @@
+;GV09 changed terminator caracter to LF rather than CR
 ;GV08 lower audio volume control to about 0.8V (Prod7)
 ;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
 ;GV06 Increase output amplitude of SSB in DSPpico on TX
@@ -106,7 +107,7 @@
 ; Now for Godil Board
 ; Version for multi pico boot with shifted bit offsets on oport
 
-CONSTANT Versionno,			87               ; special 1 July 2016
+CONSTANT Versionno,			09               ; Back on main line March 2017
 CONSTANT InitialVolume,			133'd		;lowerred volume
 
 CONSTANT MinoxrVersionno,    EE                 ; Pete
@@ -485,10 +486,10 @@ loop:               CALL      CheckADClevel
                     COMPARE      s6, FF
                     JUMP      Z, loop             ; If no character then skip-MAKE SURE ANYTHINGTO BE PERFORMED REGULARLY IS DONE BEFORE THIS POINT
 
-                    COMPARE      s6, 13'd
-                    JUMP      Z, interpcommand    ; This is end of command character
                     COMPARE      s6, 10'd
-                    JUMP      Z, loop             ; If c/r ignore
+                    JUMP      Z, interpcommand    ; This is end of command character (LF now! as of Dec 2016)
+                    COMPARE      s6, 13'd
+                    JUMP      Z, loop             ; If CR ignore
                     COMPARE      ScratchPointer, 16'd  ; Check we are not writing too many characters to the scratchpad
                     JUMP      NC, loop            ; don't write to scratch if Pointer (counter) 16 or above
                     STORE     s6, (ScratchPointer)  ; Save command character
