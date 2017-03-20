@@ -386,19 +386,15 @@ ScratchClear:
                     COMPARE      s1, 00               ; do all 256 bytes					
                     JUMP      NZ, ScratchClear    ; 
 
-					;LOAD	  s5,83				  ;value for 'S'
-                    ;CALL      Byte2UART
-                    ;CALL      Byte2UART			  ;send 'SS' to 'Uart' - ie ARM
-                    ;CALL      SendCRLF            ; added to allow get line to read OK
-					
-					;LOAD      s6, 42'd             ; *
-                    ;CALL      Send2UartTX
-					;LOAD      s6, 43'd             ; +
-                    ;CALL      Send2UartTX
-                    ;CALL      SendCRLF            ; added to allow get line to read OK
-					
-		    LOAD      s6, 0A               ; ensure FIFO is flushed
+
+					LOAD      s6, 0A               ; ensure FIFO is flushed
                     CALL      Send2UartTX
+					
+					LOAD      s6, "*"             ; 0x2A
+                    CALL      Send2UartTX
+					LOAD      s6, "?"             ; 0x3F
+                    CALL      Send2UartTX
+                    CALL      SendCRLF            ; added to allow get line to read OK
 
 
 init:               LOAD      ScratchPointer, 00
@@ -774,6 +770,7 @@ setTXmode:
 
                     CALL      TX
 					
+                    CALL      Twotone             ; added to give start of message beep
                     CALL      Twotone             ; added to give start of message beep
 
 
@@ -1331,14 +1328,24 @@ Twotone:            LOAD      s0, 66'd              ; Block DSPpico
                     LOAD      s0, 53'd
                     OUTPUT       s0, Tone
 
+                    CALL      delay_100ms
+
+                    LOAD      s0, 35'd
+                    OUTPUT       s0, Tone
+
+                    CALL      delay_100ms
+					
+                    LOAD      s0, 53'd
+                    OUTPUT       s0, Tone
 
                     CALL      delay_100ms
 
                     LOAD      s0, 35'd
                     OUTPUT       s0, Tone
 
-
                     CALL      delay_100ms
+					
+					
 
                     LOAD      s0, 00
                     OUTPUT       s0, Tone       ; and send value to SSB modulatorto reset to normal frequency
@@ -1352,6 +1359,10 @@ Twotone:            LOAD      s0, 66'd              ; Block DSPpico
 
 Confidence:             
 					CALL      TX
+					
+					CALL      Twotone             ; added to give start of message beep
+                    CALL      Twotone             ; added to give start of message beep
+
 					LOAD      s5, 00
 Confidenceloop:         
 
@@ -1393,7 +1404,9 @@ Confidenceloop:
                     LOAD      s0, 82'd              ; Un Block DSPpico 0x52
                     OUTPUT       s0, CMD2DSP         ; send R to DSP (release)
 
-					CALL      RX
+					;CALL      Warble
+					
+					CALL      setRXmode
 					
                     RETURN       
 
@@ -1497,7 +1510,7 @@ Warbleloop:         LOAD      s0, 66'd              ; Block DSPpico 0x42
 					
 					
                     ADD       s5, 01
-                    COMPARE      s5, 04               ; Do this 4 times
+                    COMPARE      s5, 06               ; Do this 4 times
                     JUMP      NZ, Warbleloop
 
                     LOAD      s0, 00
