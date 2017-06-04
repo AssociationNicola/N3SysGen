@@ -1,4 +1,5 @@
-;GV?? first tone detect
+;GV0B Tone detect working - getting AGC adjust to work thrugh DSP
+;GV?? first tone detect 
 
 
 
@@ -12,7 +13,7 @@ CONSTANT	count_1000_msb,			03                    ; upper 8-bits of 1000 count va
 CONSTANT	half_pi_LSB,			00                     ; 
 CONSTANT	half_pi_MSB,		 	40                    ; 360 degrees = $10000
 CONSTANT	phase_threshold,		30'd			;test for phase fairly constant
-CONSTANT	count_value_to_trig,		9'd			;if low phase 12 succesive times, then this is significant! - try to increase sensitivity (was 10)
+CONSTANT	count_value_to_trig,		9'd			;if low phase 12 succesive times, then this is significant! - try to increase sensitivity (was 10 - worth trying 6!)
 
 
 ;not sure about these (Aug2016)
@@ -126,7 +127,7 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
 		    LOAD      s0, StopToneBInc               ; Tone increments to detect
                     STORE     s0, STPBinc
                     
-		    CALL SpeakerOff
+		    CALL SpeakerOn	;Start with speaker ON !!!!!!!!!!!!!!!!!!!!!!
 
 
 ; Routine to look at lowest bit of Strobe to detect rising edge.
@@ -224,18 +225,21 @@ DemodulateTone:		FETCH s2,(s0)	;Tone increment (pointed to in scratch by s0, to 
 			ADD s0,02	;move back up to scratch pointer location for MSB of I accumulating signal (of previous tone!)
 			FETCH s6,(s0)	;MSB of Accumulated I demod value
 
-;added this bit to get debug info
-;			SUB  s0,01	;to get an even value!
-;			SRA	s0	;divide by 2 to get 6,11,16 or 21
-;			OUTPUT s6,(s0)	;Export intermediate I value
-;			SLA	s0	;now get s0 back on track
-;			ADD  s0,01	;add one to get back and another to advance to I LSB accu
+;added this bit to get debug info again !!!!!!!!!!!!!!!!!!!!!!
+			SUB  s0,01	;to get an even value!
+			SRA	s0	;divide by 2 to get 6,11,16 or 21
+			OUTPUT s6,(s0)	;Export intermediate I value accumulated
+			SLA	s0	;now get s0 back on track
+			ADD  s0,01	;add one to get back and another to advance to I LSB accu
 ;Would be ADD s0,01 instead of the above debug
 			ADD  s0,01	;add one to get back and another to advance to I LSB accu
 
 			FETCH s7,(s0)	;LSB of Accumulated I demod value (base + 4)
 			ADD  s7,s3	;signed accumulate into Accumulated value
 			ADDCY s6,s2	;accumulate into Accumulated value
+
+			CALL CheckNotTooBigI	;Check s6(MSB),s7 not to big (ie bigger than 40)
+
 			STORE s7,(s0)	;update LSB Accumulated value
 			SUB s0,01	;decrement scratch pointer s0
 			STORE s6,(s0)	;update MSB Accumulated value
@@ -260,18 +264,22 @@ DemodulateTone:		FETCH s2,(s0)	;Tone increment (pointed to in scratch by s0, to 
 			ADD s0,02	;move back up to scratch pointer location for Q MSB of accumulating signal (of previous tone!)
 			FETCH s6,(s0)	;MSB of Accumulated Q demod value
 
-;added this bit to get debug info
-;			SUB  s0,01	;to get an even value!
-;			SRA	s0	;divide by 2 to get 7,12,17 or 22
-;
-;			SLA	s0	;now get s0 back on track
-;			ADD  s0,01	;add one to get back and another to advance to I LSB accu
+;added this bit to get debug info renable !!!!!!!!!!!!!!!!!!!!!!!!!!
+			SUB  s0,01	;to get an even value!
+			SRA	s0	;divide by 2 to get 7,12,17 or 22
+			OUTPUT s6,(s0)	;Export MSB of  Q value accumulated
+			SLA	s0	;now get s0 back on track
+			ADD  s0,01	;add one to get back and another to advance to I LSB accu
 ;Would be ADD s0,01 instead of the above debug
 			ADD  s0,01	;add one to get back and another to advance to I LSB accu
 
 			FETCH s7,(s0)	;LSB of Accumulated Q demod value (base + 6)
 			ADD  s7,s3	;signed accumulate into Accumulated value
 			ADDCY s6,s2	;accumulate into Accumulated value
+
+			CALL CheckNotTooBigQ	;Check s6(MSB),s7 not to0 big (ie bigger than 48)
+
+
 			STORE s7,(s0)	;update LSB Accumulated value
 			SUB s0,01	;decrement scratch pointer s0 (s0 now at base + 5)
 			STORE s6,(s0)	;update MSB Accumulated value
@@ -341,7 +349,6 @@ CarryOn:		ADD TempScratchPointer,02
 ;This last part to be corrected to check magnitude of phase shift
 ;OK ready to do now using software multiply
 
-;;;;;;;;;;;;;;;;;;			RETURN		;TEMP until the phase constant code below is sorted out!
 
 			ADD  TempScratchPointer,01 	;move pointer on to previous phase (inc+7)
 			FETCH s2,(TempScratchPointer)	;s2 now has msb of previous phase
@@ -357,9 +364,10 @@ CarryOn:		ADD TempScratchPointer,02
 			SRA	s0	;divide by 2 to get 7,12,17 or 22
 ;
 
-			OUTPUT s1,(s0)	;Export Counter value come out on 'IQ stoptones', when value '5' is selected
-			SUB	s0,01	;to get 6,11,16,21 to align with 'IQStarttones' read by selecting '4' value
-			OUTPUT s2,(s0)	;Export phase difference value come out on 'IQ starttones', when value '4' is selected
+;Debug output Counter value and Phase difference
+;			OUTPUT s1,(s0)	;Export Counter value come out on 'IQ stoptones', when value '5' is selected 
+;			SUB	s0,01	;to get 6,11,16,21 to align with 'IQStarttones' read by selecting '4' value
+;			OUTPUT s2,(s0)	;Export phase difference value come out on 'IQ starttones', when value '4' is selected
 					
 			COMPARE s2,phase_threshold	;is it less than threshold, then set carry
 			JUMP	NC,dropcounter		; if failed then drop the counter and return	
@@ -371,7 +379,10 @@ CarryOn:		ADD TempScratchPointer,02
 			RETURN		
 
 ;Ultimately will use TempScratchPointer to work out which tone was detected
-Whoopie:		COMPARE TempScratchPointer,19'd	;if start tone A counter
+;need to reset counter to Zero!!
+Whoopie:		LOAD  s0,00
+			STORE s0,(TempScratchPointer)	;reset counter to zero
+			COMPARE TempScratchPointer,19'd	;if start tone A counter
 			CALL  Z,isStrtToneA
 			COMPARE TempScratchPointer,29'd	;if start tone B counter
 			CALL  Z,isStrtToneB
@@ -400,6 +411,59 @@ IncrementCounter:	FETCH s0,SampleCounterMSB
 ;Check if any of the time outs are passed
 			CALL	CheckforTimeOuts
 			RETURN
+
+
+
+
+;This is to drop the value of the accumulated I and Q values so that don't end up getting too big for the Cordic
+CheckNotTooBigI:	LOAD	s2,s6
+			LOAD	s3,s6	;also have to save s6 as absval kills s6
+			CALL	absval	;return absval in s2
+			LOAD	s6,s3	;put value back in s6
+			COMPARE	s2,30	;is absolute value bigger than or equal 30 (then NC)
+			RETURN  C	;if not return
+
+			SRX	s6
+			SRA	s7	;half value in s6/s7
+;now need to drop value in accummulated Q
+			ADD	s0,02	;increase scratch pointer to Q accumulation values
+			FETCH	s3,(s0)	;LSB of Q accumulated
+			SUB	s0,01
+			FETCH	s2,(s0)	;MSB of Q accumulated
+			SRX	s2
+			SRA	s3	;half Q accumulated value
+			STORE	s2,(s0)
+			ADD	s0,01
+			STORE	s3,(s0)
+			SUB	s0,02	;Get s0 back to its original value
+			
+			RETURN
+			
+CheckNotTooBigQ:	LOAD	s2,s6
+			LOAD	s3,s6	;also have to save s6 as absval kills s6
+			CALL	absval	;return absval in s2
+			LOAD	s6,s3	;put value back in s6
+			COMPARE	s2,30	;is absolute value bigger than or equal 30 (then NC)
+			RETURN  C	;if not return
+
+			SRX	s6
+			SRA	s7	;half value in s6/s7
+;now need to drop value in accummulated Q
+			SUB	s0,02	;reduce scratch pointer to I accumulation values
+			FETCH	s3,(s0)	;LSB of I accumulated
+			SUB	s0,01
+			FETCH	s2,(s0)	;MSB of I accumulated
+			SRX	s2
+			SRA	s3	;half I accumulated value
+			STORE	s2,(s0)
+			ADD	s0,01
+			STORE	s3,(s0)
+			ADD	s0,02	;Get s0 back to its original value
+			
+			RETURN
+
+
+
 
 			
 			
@@ -438,6 +502,9 @@ isStopToneA:		COMPARE Mode,02		;Check if in RX mode
 isStopToneB:		COMPARE Mode,03		;Check if in stopping mode
 			RETURN	NZ		;Don't do anything if not stopping
 			LOAD Mode,00		;go back to idle
+			CALL delay_1s		;dont turn speaker off immediately immediately
+			CALL delay_1s		;dont turn speaker off immediately immediately
+
 			CALL SpeakerOff		;Turn speaker off
 			LOAD SampleCounter,00
 			STORE SampleCounter,SampleCounterMSB	;Reset counter (not really needed, but just for tidiness)
@@ -475,15 +542,36 @@ checkStoptoneAtimeout:		FETCH s0,SampleCounterMSB	;Get counter
 
 			
 
-SpeakerOn:			LOAD	s0,01
-				OUTPUT s0,State
-				RETURN
+
+SpeakerOn:			LOAD     s0,01
+                                OUTPUT s0,State
+                                                               
+                                LOAD      s0, 43'd              ; 
+                                OUTPUT    s0, CmdToUser
+                               
+                               LOAD      s0, 49'd              ;
+                               OUTPUT    s0, CmdToUser
+                                                               
+                               RETURN
+
+
+
+
+
 				
-SpeakerOff:			LOAD	s0,02		;Turns Green LED off (bit 1)? and stops speaker (currently driven directly off not speaker enable)
-				OUTPUT s0,State
-				LOAD	Mode,00		;return to idle state
+     
+SpeakerOff:                    LOAD     s0,02                      ;Turns Green LED off (bit 1)? and stops speaker (currently driven directly off not speaker enable)
+                               OUTPUT s0,State
+                               LOAD     Mode,00                              ;return to idle state
+                                                               
+                               LOAD      s0, 43'd              ; '+'
+                               OUTPUT    s0, CmdToUser
+                                                               
+                              LOAD      s0, 48'd              ;
+                              OUTPUT    s0, CmdToUser
+                                                               
+                              RETURN				
 				
-				RETURN
 				
 				
 ;Does 16 bit signed accumulation of 8 bit signed value in s1 into s4/s5 which are recoverred from scratch pad pointed to by s2 (loading here the offset to the actual tone
