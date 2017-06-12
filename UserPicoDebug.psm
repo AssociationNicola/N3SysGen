@@ -436,11 +436,16 @@ init:               LOAD      ScratchPointer, 00
 					OUTPUT 		s0,AudioVolume
 
                     CALL      delay_100ms
+					
+
 
                     LOAD      s0, AudioOutSelect  ; + 16; normal ADC channel, AudioOUtSelect doesn't do anything here! The 16also sets Loran Blanking if in firmware.
                     STORE     s0, ADCstate        ; save
                     OUTPUT       s0, ADCstate_port   ; Also sets analogue input to 0
 
+					LOAD      s0, FF
+					STORE     s0, ADCLevel
+					
 startLoop:
 					LOAD      ScratchPointer, 00
 
@@ -506,12 +511,12 @@ loop:               CALL      CheckADClevel
 SendADCToARM:
 					FETCH     s1, peteTXMode
 					COMPARE   s1, 00
-					RETURN    NZ                    ; do not send unless transmitting
+					RETURN    NZ                    ; do not send unless receiving
 
 					LOAD      s6, "&"
                     CALL      Send2UartTX			; send the &
 					
-					LOAD      s6, "e"				; indicates 'earthing' quality
+					LOAD      s6, "v"				; indicates 'earthing' quality
                     CALL      Send2UartTX			; send the &
 					
 					; Byte2Chars takes data in s5 and returns two ascii codes in s6,s7 
@@ -923,6 +928,12 @@ interploop:         COMPARE      s9, ScratchPointer
                     COMPARE      s0, 90'd              ; is this a Z?
                     JUMP      Z, reboot           ; then go to reboot code (ie to reboot need to send Z<CR>, then do Prog...)
 
+                    LOAD      s6, "?"				;send unknown 3F
+					CALL      Send2UartTX			; send the keypress value
+					
+					LOAD      s6, s0
+					CALL      Send2UartTX			; send the keypress value
+					
 					CALL      SendCRLF 
 
                     JUMP      startLoop
@@ -946,7 +957,10 @@ MsgFromARM:
                     CALL      Z, BeaconBeep	
 					
                     COMPARE      s6, "y"			;send LCD on to Keypad
-                    CALL      Z, SendToKeypad					
+                    CALL      Z, SendToKeypad		
+					
+                    COMPARE      s6, "W"			;watchdog check
+                    CALL      Z, SendWatchdogReply					
 
                     COMPARE      s6, "Y"			;send LCD off to Keypad
                     CALL      Z, SendToKeypad					
@@ -1431,7 +1445,6 @@ Confidenceloop:
                     RETURN       
 
 
-
 TurnOffWarble:             
 					CALL      TX
 					LOAD      s5, 00
@@ -1582,6 +1595,19 @@ cancelbeacon:       FETCH     s0, Mode
 
                     RETURN       
 
+SendWatchdogReply:
+					CALL      SendToKeypad
+					
+					LOAD      s6, "&"             ; start of message
+                    CALL      Send2UartTX			; send 
+					LOAD      s6, "p"             ; User Watchdog going
+                    CALL      Send2UartTX			; send 
+
+					LOAD      s6, 0D             ; c/r
+                    CALL      Send2UartTX			; send 
+					LOAD      s6, 0A      
+                    CALL      Send2UartTX			; send 
+					RETURN
 
 ; ;;Pete
 ; ;;Pete
@@ -1697,8 +1723,10 @@ getUARTchar:        LOAD      s6, FF             ; Return FF if no character
 
                     INPUT        s6, Uart_rx         ; get character
                     AND       s6, 7F
-					; CALL      Send2UartTX         ; and echo back to terminal. - SHOULD USE Send2UartTX (not in message mode)
-                    RETURN       
+					
+					;;CALL      Send2UartTX         ; and echo back to terminal. - SHOULD USE Send2UartTX (not in message mode)
+                    
+					RETURN       
 
 
 
@@ -1953,8 +1981,6 @@ getnextscratchchar: FETCH     s0, (s9)
                     ADD       s9, 01               ; increment pointer
                     LOAD      s6, s0
                     
-					CALL      Send2UartTX         ; and echo back to terminal. Message mode					
-
                     RETURN       
 
 
