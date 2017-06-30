@@ -62,14 +62,16 @@
 
 
 
-Need better precission on AGC!!
 
 ;CONSTANT	AGCuppthreshold,		10'd
 ;CONSTANT	AGCuppthreshold2,		16'd			;3dB above first threshold
 ;CONSTANT	AGCuppthreshold4,		22'd
-CONSTANT	AGCuppthresholdRX2,		10'd			;Change to 10 (June2017 after BCRC) Upp2 = 10 Upp =5 Initial = 4 low=2 low2=1
-CONSTANT	AGCuppthresholdTX2,		6'd			;Upp2=6 Upp=3 Initial=2 low=2 low2=1
+;CONSTANT	AGCuppthresholdRX2,		10'd			;Change to 10 (June2017 after BCRC) Upp2 = 10 Upp =5 Initial = 4 low=2 low2=1
+;CONSTANT	AGCuppthresholdTX2,		6'd			;Upp2=6 Upp=3 Initial=2 low=2 low2=1
 
+CONSTANT	AGChigh,				40'd		;High threshold for AGC (accumulated over 32ms)
+CONSTANT	AGClow,				20'd		;Low threshold for AGC (accumulated over 512ms)
+CONSTANT	AGClow2,				10'd		;Even lower threshold for AGC (accumulated over 512ms)
 
 
 CONSTANT    delay_1us_constant,       06                  ; Value (13)19 or 12? decimal suitable for 50MHz clock – about 6 for 33MHz?
@@ -114,8 +116,8 @@ CONSTANT	coeffQ4LSB,				2F
 
 
 ; Registers
-NAMEREG		sF, AveSignalUSB            ; In fact average of magnitude
-NAMEREG		sE, AveSignalMSB
+NAMEREG		sF, AveSignal512ms            ; In fact accumulate of magnitude over 512ms
+NAMEREG		sE, AveSignalMSB		;average up to 32ms
 NAMEREG		sD, AveSignalLSB
 ;NAMEREG		sD, BaselineMSB                  ; In fact average of signed signal
 ;NAMEREG		sC, BaselineLSB
@@ -139,7 +141,7 @@ CONSTANT	MltplyMSB,		4'd                   ; Top significant byte of multiplier 
 CONSTANT	MltplyLSB,		5'd                   ; (only 16 bits retained)
 CONSTANT	BTaudioMSB,		6'd                   ; Input from headset micro
 CONSTANT	BTaudioLSB,		7'd                   ; 
-CONSTANT	RAMdataMSB,		8'd					  ;Data from variable storage RAM
+CONSTANT	SaturationBits,		8'd					  ;lowest 3 bits are the top 3 bits of the 18bit demod signal (indicate saturation) - the top 5 bits are zeros
 CONSTANT	RAMdataLSB,		9'd
 CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone, bit 2 is TX_high, bit 3 is speaker on (from tone detect)
 CONSTANT	StartToneAmp,		11'd
@@ -180,7 +182,7 @@ CONSTANT	StartToneALong,			20'd
 CONSTANT	StartToneB,			21'd
 CONSTANT	StartToneBLong,			22'd
 CONSTANT	StopToneA,			23'd
-CONSTANT	AveSignalUSBport,			24'd
+CONSTANT	AveSignal512msport,			24'd
 CONSTANT	AveSignalMSBport,			25'd
 CONSTANT	AveSignalLSBport,			26'd
 
@@ -226,9 +228,12 @@ CONSTANT	AGCcounter,			114'd 			 	;store counter 0 to 255 to only perform AGC ca
 ;Removed Tone related scratchregisters
 CONSTANT	NormalisedMagMSB,		115'd   ;Absolute value of current signal
 CONSTANT	NormalisedMagLSB,		116'd   ;Absolute value of current signal
-CONSTANT	AGCupperThresholdRX2,	117'd	;This is in fact twice the Upper threshold SR0 for Upper threshold, SRO and +1 for lower threshold and SR0 again for lower threshold2
-CONSTANT	AGCupperThresholdTX2,	118'd	;This is in fact twice the Upper threshold
-CONSTANT    AGCupperThresholdInUse,	119'd	;This is the value relevent to the current mode (RX/TX)
+;CONSTANT	AGCupperThresholdRX2,	117'd	;This is in fact twice the Upper threshold SR0 for Upper threshold, SRO and +1 for lower threshold and SR0 again for lower threshold2
+;CONSTANT	AGCupperThresholdTX2,	118'd	;This is in fact twice the Upper threshold
+;CONSTANT    AGCupperThresholdInUse,	119'd	;This is the value relevent to the current mode (RX/TX)
+
+CONSTANT	AGCcounterMSB,		117'd	;Uses for 512ms accumulation
+
 
 ;256 scratchpad addresses available
 
@@ -257,15 +262,17 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
                     STORE     s0, 07
                     LOAD      s0, 1'd               ; phase for 0.224 degrees
                     STORE     s0, 08
-                    
-                    LOAD	  s0,47'd
-                    STORE	  s0,AGCvalueTX		
-                    LOAD	  s0,52'd
-                    STORE	  s0,AGCvalueRX		;set to lowish value for RX
-					LOAD	  s0,AGCuppthresholdRX2
-					STORE     s0,AGCupperThresholdRX2
-					LOAD	  s0,AGCuppthresholdTX2
-					STORE     s0,AGCupperThresholdTX2
+
+
+;Don't need this with new AGC                    
+;                    LOAD	  s0,47'd
+ ;                   STORE	  s0,AGCvalueTX		
+  ;                  LOAD	  s0,52'd
+   ;                 STORE	  s0,AGCvalueRX		;set to lowish value for RX
+	;				LOAD	  s0,AGCuppthresholdRX2
+	;				STORE     s0,AGCupperThresholdRX2
+	;				LOAD	  s0,AGCuppthresholdTX2
+	;				STORE     s0,AGCupperThresholdTX2
 					
 
 ;Sinewave table: Step through this 1 in 8 loops to give 62.5Hz sinewave on transmission
@@ -331,11 +338,8 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
 ; Initialise AGC
                     LOAD      s0, 255'd             ; - 1
                     STORE     s0, VolSetting
-                    LOAD	  s0,48'd				  ;Start with hig attenuation (max 63) value for external AGC MUX version
+                    LOAD	  s0,32'd				  ;Start with medium attenuation (max 63) value for external AGC MUX version
                     STORE     s0, AGCvalue		  ;maybe start with 16 (was 8)?
-                    FETCH      AveSignalUSB, AGCupperThresholdRX2   ; set signal averager to moderate level after following 2 manips
-					SR0			AveSignalUSB
-					SUB			AveSignalUSB,01				;Should end up being 9 or 2!
 
 
 
@@ -349,16 +353,40 @@ AwaitRise:          INPUT     s0, Strobe
                     COMPARE   s0, 00
                     JUMP      Z, AwaitRise        ; if 0 still, wait a bit more...
 
+					INPUT     s0, SaturationBits	;to get 3 "saturation bits"
+					COMPARE s0,07
+					JUMP  Z,Allswell
+					COMPARE s0,00
+					JUMP  Z,Allswell
+;So is hitting the rails!!
+					FETCH s1,AGCvalue
+					COMPARE s1,64
+					JUMP Z,is64already
+					ADD  s1,04
+					AND  s1,FC	;Get rid of lower 2 bits
+					STORE s1,AGCvalue	;increase attenuation!
+
+is64already:				COMPARE s0,04
+					JUMP C,SaturatedPositive
+					LOAD s0,00		;Is actually saturated negative
+					LOAD s1,80		;This is the most negative number
+					JUMP HaveInput
 
 
- 					INPUT     s0, AudioLSB	   ; Now have the new value (different addresses from before!)
+SaturatedPositive:			LOAD s0,FF
+					LOAD s1,7F
+					JUMP HaveInput
+		
+                    
+
+Allswell:				INPUT     s0, AudioLSB	   ; Now have the new value (different addresses from before!)
  					INPUT 	  s1,AudioMSB
 
 
 
 
 ; perform automatic gain contrl
-                    FETCH     s3, AGCvalue		;This needs to be corrected from the value from tone detect when 'Receiving'
+HaveInput:                    FETCH     s3, AGCvalue		;This needs to be corrected from the value from tone detect when 'Receiving'
 					CALL      AGC 		  						;Now with external MUX to adjust AGC
 					CALL	  Abs16Val
 					STORE	  s3,NormalisedMagMSB				
@@ -405,180 +433,199 @@ BackfromTransmitting: 		INPUT   s0, Command         ; Check if FIFO character pr
 
 
 
-; Accumulate magnitude
+; Accumulate magnitudes over 32 and 512ms
 ;__________________________________________________________________________________________
 	  	 	  	FETCH   s3,AGCcounter
 	  	 	  	ADD	   s3,01
 	  	 	  	STORE   s3,AGCcounter
  	 	  	
-;NOW do it every time!
-;_____________________________________________________________________________________________
-
-;Need to overhaul this !! Oct2015
-;So do this bit at 8kHz rate - so has about a 1s time constant
-; Add 1/32 x abs(new normalised value - which is 256 times smaller than averaged value)
-;Would be better to accumulate abs signal over 
-
-
-
-				INPUT 	s2,Status
-				AND	s2,06	 ;look at bit 1 and 2
-					
-;In this version switching to BT input is through external multiplexer to go through emphasis filter
-				COMPARE s2,04	 ;True if BT signal present and TX_high
-					
-				JUMP  Z,    AwaitAudioVal  ;Don't do anything if on BT and TX_high
-
 
 
                     FETCH      s3, NormalisedMagMSB
-                    FETCH      s2, NormalisedMagLSB		  ;These are absolute values
-
-					CALL	   Divide32
-
-
-
-
-                    ADD       AveSignalLSB, s2
-                    ADDCY      AveSignalMSB, s3
-					ADDCY      AveSignalUSB, 00
-
-; now subtract 1/8192 of current value of average
-                    LOAD      s3, AveSignalUSB
-                    LOAD      s2, AveSignalMSB	 ; These should be positive values!
-
-                  	CALL	  Divide32
-                  	SUB		AveSignalLSB,s2
-                  	SUBCY	AveSignalMSB,s3
-                  	SUBCY	AveSignalUSB,00
-                  	
                     
+                    
+                    
+                    ADD       AveSignalLSB, s3
+                    ADDCY      AveSignalMSB, 00
+                    
+		CALL C,FourTimestooBig	 	; Has saturated so need to go and cool it! - increase AGC by 16 steps!
 
 
-;Output AveSignalMSB to PS
-			LOAD	s3,AveSignalUSB		   ;AveSignalMSB is actually a register!
-			OUTPUT	s3,AveSignalUSBport
-			LOAD	s3,AveSignalMSB		   ;AveSignalMSB is actually a register!
-			OUTPUT	s3,AveSignalMSBport
-			LOAD	s3,AveSignalLSB		   ;AveSignalMSB is actually a register!
-			OUTPUT	s3,AveSignalLSBport
+	  	 	  	FETCH   s3,AGCcounter
+			COMPARE s3,00	;Has it overflowed - ie after 32ms
+                	JUMP    NZ,   AwaitAudioVal	;Loop back if not
+;Add another counter here to go to 16.....
+			FETCH s3,AGCcounterMSB
+			ADD s3,01
+			STORE  s3,AGCcounterMSB   ;Increment second counter
+			FETCH s3,AGCvalue		;put AGCvalue in s3 incase we call BitTooBig
+
+			ADD	AveSignal512ms,AveSignalMSB	;accumulate 32ms sum into this register
+			COMPARE	AveSignalMSB,AGChigh
+			CALL NC, BitTooBig		;Accumulated magnitude over 32ms is too big
+			LOAD AveSignalMSB,00				;and reset 32ms sum to zero
+
+			FETCH s3,AGCcounterMSB
+			AND	s3,0F		;get 0-15 count of 32ms
+			COMPARE s3, 00		;Are we at 512ms
+			JUMP	NZ, AwaitAudioVal
+
+;Have reached 512ms
+;Output AveSignalMSB to PS - ever ~0.5s AveSignal512ms
+			OUTPUT	AveSignal512ms,AveSignal512msport   ;512ms average
+			OUTPUT	AveSignalMSB,AveSignalMSBport   ;AveSignalMSB is actually a register 32ms average!
+			OUTPUT	AveSignalLSB,AveSignalLSBport    ;AveSignalMSB is actually a register!
 
 
 	 		FETCH   s3, AGCvalue
 			OUTPUT	s3,StopToneA	   	   	   ;TEMP !!!!!!!!!!!!!!!! send AGC value to this position
 
+			
+;AGCvalue still in s3
+			COMPARE  AveSignal512ms,AGClow
+			CALL   C,BitTooLow
 
-; Now adjust AGC value if necessary
  
 
 ;disable the following 7 lines for the moment
 ;Don't do this if Speaker is ON - ie is receiving a message, but on first time that Speaker on is high do a correction of AGCvalue
-			INPUT	s0,Status
-			AND	s0,08		;Look at speaker on bit - this is information from the tone detect pico!
-			COMPARE s0,08
-			JUMP Z,Receiving	;Check if receiving state is alread latched or whether this is first time to notice that we are receiving
+;			INPUT	s0,Status
+;			AND	s0,08		;Look at speaker on bit - this is information from the tone detect pico!
+;			COMPARE s0,08
+;			JUMP Z,Receiving	;Check if receiving state is alread latched or whether this is first time to notice that we are receiving
 ;If not receiving a signal better reset state bit 3
-			FETCH     s1, State
+;			FETCH     s1, State
 		
-            		AND        s1, F7		;bit 3 zero
-            		STORE     s1, State           ; reset bit 3 (ie set internal DSP state to 'not receiving')
+;            		AND        s1, F7		;bit 3 zero
+ ;           		STORE     s1, State           ; reset bit 3 (ie set internal DSP state to 'not receiving')
 
-ContinueReceiving:
-
-;So now adjust AGCvalue while in TX or speaker not on
-;NEEDed to change this an load in to a register the thresholdinuse value depending on whether RX or TX
-;Don't do upperthreshold4 now (18/4/17)
-
-			FETCH 	  s0,AGCupperThresholdInUse
-			COMPARE   AveSignalUSB, s0	  ;Is pretty big (s0 has top upperthreshold2 value)
-                	CALL      NC, increaseAGC2     ; signal too big, increase attenuation by 6dB
-			SR0 	  s0							;Halve s0 to Threshold upper value
-
-                	COMPARE   AveSignalUSB, s0	  ;now 10 or 5
-
-               		CALL      NC, increaseAGC     ; signal slightly too big, increase attenuation by 1_5dB
-				
-			SR0 	  s0							;Halve s0
-			ADD	  s0,01						;But add 1 again to get to 3 on RX and 2 on TX to get lowerthreshold
-
-                	COMPARE   AveSignalUSB, s0	  ; ie below low threshold 
-                	CALL      C, decreaseAGC
-                	STORE     s3, AGCvalue
-				
-			SR0 	  s0							;Halve s0 again to get to lowthreshold2
-
-                	COMPARE   AveSignalUSB, s0	  ;
-         	        CALL      C, decreaseAGC2					  ;ie below threshold2 
+;ContinueReceiving:
 
 
-
-
+; Now adjust AGC value if necessary
 
                 	JUMP      AwaitAudioVal
-
 ; -------------This is end of main loop--------------------------------
+					
+
+					
 
 
-Receiving:	FETCH     s1, State
-			AND	      s1,08 ;look at current state of 'receiving' bit.
-			COMPARE   s1,08			;This is looking at the internal recorded state rather than the 'Status' input which takes bit 3 input from the TD pico
-			JUMP     Z,ContinueReceiving	;Carry on if already acnowledged in receive mode (and still perform AGC)
-			FETCH     s1, State
-		
-            OR        s1, 08
-            STORE     s1, State           ; set bit 3 (ie set internal DSP state to 'receiving')
 
+					
+;Well big!!					
+FourTimestooBig:	LOAD s2,16
+					CALL      increaseAGC	;need to do this 16 times!
+					SUB s2,01				;decrement counter
+					COMPARE s2,00			;Has counter reached zero
+					JUMP  NZ,FourTimestooBig
+					RETURN					;Return after 16 loops
+					
+					
+; So need to adjust AGCvalue:
+;Enter with AGCvalue in s3
+BitTooBig:	CALL      increaseAGC     ; signal slightly too big, increase attenuation by 1_5dB
+			CALL	  reduceAveSignalMSB_1_5dB		;reduce magnitude of 
+			COMPARE	AveSignalMSB,AGChigh		;see if we need to reduce the level (ie increase AGC) some more
+			JUMP	NC,BitTooBig					;loop back if still too big
+			RETURN
+			
+
+;this effectively multiplies AveSignalMSB by 0.84375 (ie reduces it by 1.5dB)
+reduceAveSignalMSB_1_5dB:  	SR0 AveSignalMSB		;half of AveSignalMSB
+							LOAD s2,AveSignalMSB
+							SR0 AveSignalMSB		;quarter of AveSignalMSB
+							ADD s2,AveSignalMSB
+							SR0 AveSignalMSB		;eighth of AveSignalMSB
+							SR0 AveSignalMSB		;16th of AveSignalMSB
+							ADD s2,AveSignalMSB
+							SR0 AveSignalMSB		;32nd of AveSignalMSB
+							ADD s2,AveSignalMSB		;now should be about 0.84375 times original value
+							LOAD AveSignalMSB,s2	;put back in AveSignalMSB
+							RETURN
+							
+
+
+;Again enter with AGCvalue in s3							
+BitTooLow:	CALL      decreaseAGC
+			COMPARE	AveSignal512ms,AGClow2	;Is the level 2 times too low?
+			RETURN	NC							;Return in Ave level over 512ms is greater than the half the lower threshold
+			CALL      decreaseAGC
+			CALL      decreaseAGC
+			CALL      decreaseAGC				;make up to a drop in AGCvalue of 4 (reduce attenuation a factor 2) to bring volume up quickly
+			
+			RETURN
+
+
+
+				
+					
+					
+					
+					
+
+
+
+;Receiving:	FETCH     s1, State
+;			AND	      s1,08 ;look at current state of 'receiving' bit.
+;			COMPARE   s1,08			;This is looking at the internal recorded state rather than the 'Status' input which takes bit 3 input from the TD pico
+;			JUMP     Z,Somewhere??;	;Carry on if already acnowledged in receive mode (and still perform AGC)
+;			FETCH     s1, State
+;		
+ ;           OR        s1, 08
+  ;          STORE     s1, State           ; set bit 3 (ie set internal DSP state to 'receiving')
+;!!!!!!!!!!!!!!!!!!!!!!!!! is this really needed??? - maybe need to return here, or jump??
 ;Now update AGC value
 ;First check if received tone is too strong and need to increase attenuation - Need to check Target values!!!!!!!!!!!!!!!!!!!!!!!!!!!!! (23/4/17)
-			FETCH s3, AGCvalue
-			INPUT	s1,StartToneAmp
-			COMPARE s1,36'd		;is it 36 of bigger (ie 1.5dB above target value of 30)
-			CALL	NC,increaseAGC
-			COMPARE s1,43'd		;is it 43 of bigger 
-			CALL	NC,increaseAGC
-			COMPARE s1,51'd		;is it 51 of bigger 
-			CALL	NC,increaseAGC
-			COMPARE s1,61'd		;is it 61 of bigger 
-			CALL	NC,increaseAGC
-			COMPARE s1,72'd		;is it 72 of bigger 
-			CALL	NC,increaseAGC
-			COMPARE s1,85'd		;is it 85 of bigger 
-			CALL	NC,increaseAGC
-			COMPARE s1,101'd		;is it 101 of bigger
-			CALL	NC,increaseAGC
-			COMPARE s1,121'd		;is it 121 of bigger
-			CALL	NC,increaseAGC
-			COMPARE s1,143'd		;is it 143 of bigger 
-			CALL	NC,increaseAGC
-			COMPARE s1,170'd		;is it 170 of bigger 
-			CALL	NC,increaseAGC
-			COMPARE s1,202'd		;is it 202 of bigger
-			CALL	NC,increaseAGC
-			COMPARE s1,241'd		;is it 241 of bigger
-			CALL	NC,increaseAGC
-			
-			COMPARE s1,26'd		;is it less than 26 (ie 1.5dB below target value of 30)
-			CALL	C,decreaseAGC
-			COMPARE s1,22'd		;is it less than 22 
-			CALL	C,decreaseAGC
-			COMPARE s1,18'd		;is it less than 18 
-			CALL	C,decreaseAGC
-			COMPARE s1,15'd		;is it less than 15 
-			CALL	C,decreaseAGC
-			COMPARE s1,13'd		;is it less than 13 
-			CALL	C,decreaseAGC
-			COMPARE s1,11'd		;is it less than 11 
-			CALL	C,decreaseAGC
-			COMPARE s1,9'd		;is it less than 9 
-			CALL	C,decreaseAGC
-			COMPARE s1,8'd		;is it less than 8 
-			CALL	C,decreaseAGC
-
+;			FETCH s3, AGCvalue
+;			INPUT	s1,StartToneAmp
+;			COMPARE s1,36'd		;is it 36 of bigger (ie 1.5dB above target value of 30)
+;			CALL	NC,increaseAGC
+;			COMPARE s1,43'd		;is it 43 of bigger 
+;			CALL	NC,increaseAGC
+;			COMPARE s1,51'd		;is it 51 of bigger 
+;			CALL	NC,increaseAGC
+;			COMPARE s1,61'd		;is it 61 of bigger 
+;			CALL	NC,increaseAGC
+;			COMPARE s1,72'd		;is it 72 of bigger 
+;			CALL	NC,increaseAGC
+;			COMPARE s1,85'd		;is it 85 of bigger 
+;			CALL	NC,increaseAGC
+;			COMPARE s1,101'd		;is it 101 of bigger
+;			CALL	NC,increaseAGC
+;			COMPARE s1,121'd		;is it 121 of bigger
+;			CALL	NC,increaseAGC
+;			COMPARE s1,143'd		;is it 143 of bigger 
+;			CALL	NC,increaseAGC
+;			COMPARE s1,170'd		;is it 170 of bigger 
+;			CALL	NC,increaseAGC
+;			COMPARE s1,202'd		;is it 202 of bigger
+;			CALL	NC,increaseAGC
+;			COMPARE s1,241'd		;is it 241 of bigger
+;			CALL	NC,increaseAGC
+;			
+;			COMPARE s1,26'd		;is it less than 26 (ie 1.5dB below target value of 30)
+;			CALL	C,decreaseAGC
+;			COMPARE s1,22'd		;is it less than 22 
+;			CALL	C,decreaseAGC
+;			COMPARE s1,18'd		;is it less than 18 
+;			CALL	C,decreaseAGC
+;			COMPARE s1,15'd		;is it less than 15 
+;			CALL	C,decreaseAGC
+;			COMPARE s1,13'd		;is it less than 13 
+;			CALL	C,decreaseAGC
+;			COMPARE s1,11'd		;is it less than 11 
+;			CALL	C,decreaseAGC
+;			COMPARE s1,9'd		;is it less than 9 
+;			CALL	C,decreaseAGC
+;			COMPARE s1,8'd		;is it less than 8 
+;			CALL	C,decreaseAGC
+;
 
 ;Now updata AGCvalue
-			STORE s3, AGCvalue
-			
-             JUMP      AwaitAudioVal
+;			STORE s3, AGCvalue
+;LOOK carefully at this as may need to do AGC (and so do a return)			
+ ;            JUMP      AwaitAudioVal
                     
 
 
@@ -738,8 +785,8 @@ OutAmp:
 ;					OUTPUT     s4,Data2archiveLSB							  ;Use this if want to store phase
 ;					OUTPUT     s5,Data2archiveMSB
 
-					FETCH   s3, AGCvalue
-					OUTPUT	s3,StopToneA	   	   	   ;TEMP !!!!!!!!!!!!!!!! send AGC value to this position when transmitting
+;					FETCH   s3, AGCvalue
+;					OUTPUT	s3,StopToneA	   	   	   ;This is now done every 0.5s in AGC routine
 			
 								
 				   JUMP      BackfromTransmitting
@@ -796,32 +843,11 @@ invertval:	  		LOAD      s4, 00
 increaseAGC:        COMPARE      s3, 63'd  		   ; was44
                     RETURN       Z                   ; don't do anything if already 63 (was 44 (was 22, before that 11))
 
-                    FETCH      AveSignalUSB, AGCupperThresholdInUse   ; set signal averager to moderate level after following 2 manips
-					SR0			AveSignalUSB
-					SUB			AveSignalUSB,01				;Should end up being 4 with RX or 2 on TX!
- 
-;                    LOAD      AveSignalUSB, AGCInitial   ; set signal averager to moderate level
-;                    LOAD      AveSignalUSB, AGClowthreshold       ; set signal averager to moderate level
-;                    ADD       AveSignalUSB, AGCuppthreshold       ; set signal averager to moderate level
-;					SR0       AveSignalUSB
-
                     ADD       s3, 1'd               ; so yes signal really has been too big for too long!
-		;           LOAD      s5, s3  ->this was just used when sending value to UART?
+					STORE s3,AGCvalue		;put s3 back in AGCvalue
 
                     RETURN       
 
-;increase AGCvalue by 4 to give extra 7.5dB
-increaseAGC2:	CALL increaseAGC
-				CALL increaseAGC
-				CALL increaseAGC
-				CALL increaseAGC
-				CALL increaseAGC
-
-				RETURN
-
-;increaseAGC4:	CALL increaseAGC2
-;				CALL increaseAGC2
-;				RETURN
 
 
 ; decrement attenuation
@@ -829,30 +855,13 @@ decreaseAGC:    COMPARE      s3, 00	  	   	   ; was232
                 RETURN       Z                   ; don't do anything if already  0   (was 232 ie -24 (was 244, before that 250 ie -6) )	
 
 				;				LOAD      s2,AveSignalMSB - this didn't seem to do anything (A0)
-;		    	CALL     increase1_5dB
-
-                    FETCH      AveSignalUSB, AGCupperThresholdInUse   ; set signal averager to moderate level after following 2 manips
-					SR0			AveSignalUSB
-					SUB			AveSignalUSB,01				;Should end up being 9 os 2!
-
-;                    LOAD      AveSignalUSB, AGCInitial   ; set signal averager to moderate level
-;                    LOAD      AveSignalUSB, AGClowthreshold       ; set signal averager to moderate level
-;                    ADD       AveSignalUSB, AGCuppthreshold       ; set signal averager to moderate level
-;					SR0       AveSignalUSB
 
                 SUB       s3, 01               ; so yes signal really has been too small for too long!
 				
-				; LOAD      s5, s3
-				; CALL      Export2User
+				STORE s3,AGCvalue		;put s3 back in AGCvalue
 
                 RETURN       
 
-decreaseAGC2: 	   CALL decreaseAGC
-				   CALL decreaseAGC
-                   CALL decreaseAGC
-				   CALL decreaseAGC
-
-				   RETURN
 
 
 
@@ -1277,8 +1286,8 @@ Transmitmode:       FETCH     s1, State
                     STORE	  s1,AGCvalueRX
                     FETCH	  s1,AGCvalueTX		  ;recovers last used value for AGCvalur in this mode
                     STORE      s1,AGCvalue
-					FETCH      s1,AGCupperThresholdTX2
-					STORE		s1,AGCupperThresholdInUse	;Updates the threshold values in use
+;					FETCH      s1,AGCupperThresholdTX2
+;					STORE		s1,AGCupperThresholdInUse	;Updates the threshold values in use
                     RETURN       
 
 ;Streammode:			CALL Transmitmode
@@ -1311,8 +1320,8 @@ Receivemode:        FETCH     s1, State
                     STORE	  s1,AGCvalueTX
                     FETCH	  s1,AGCvalueRX		  ;recovers last used value for AGCvalur in this mode
                     STORE     s1,AGCvalue
-					FETCH      s1,AGCupperThresholdRX2
-					STORE		s1,AGCupperThresholdInUse	;Updates the threshold values in use
+;					FETCH      s1,AGCupperThresholdRX2
+;					STORE		s1,AGCupperThresholdInUse	;Updates the threshold values in use
                     RETURN
 
 BlockDSPpico:       LOAD      s1, 240'd
@@ -1370,7 +1379,7 @@ SendGParamBack:     FETCH     s5, AGCvalue
                     RETURN       
 
 ;This can be adjusted for de-bugging AVEsignal
-SendSParamBack:     LOAD     s5, AveSignalUSB
+SendSParamBack:     LOAD     s5, AveSignal512ms
                     CALL      Export2User
                     RETURN
 
