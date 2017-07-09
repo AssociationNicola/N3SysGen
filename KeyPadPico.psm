@@ -102,10 +102,11 @@ CONSTANT	Freq2Set,				7'd		 ; values 0 nothing to set, 1>Hy, 2>N2, 3>N3 (31kHz)
 
 CONSTANT	PreviousKeyState,		10		; 16d
 CONSTANT	PreviousPTTState,		11		; 17d
-CONSTANT    KEYS_PRESSED,           12      ; 18d
-CONSTANT    KeyPressTimer,			13      ; 19d
-CONSTANT    KeyPressFast,			14      ; 20d
-CONSTANT    KeyPressFastLeadIn,		15      ; 20d
+CONSTANT	PreviousFrequency,		12		; 18d
+CONSTANT    KEYS_PRESSED,           13      ; 19d
+CONSTANT    KeyPressTimer,			14      ; 20d
+CONSTANT    KeyPressFast,			15      ; 21d
+CONSTANT    KeyPressFastLeadIn,		16      ; 22d
 
 
 
@@ -116,12 +117,13 @@ CONSTANT    KeyPressFastLeadIn,		15      ; 20d
  cold_start:      
 					
 welcome_message:    
-                    
+         
 initialise:			LOAD	  s0,00				 ;This is now used to drive LatchOn which latches the device on!!
 					OUTPUT    s0,LatchOn	 ;Latch On if 1
 					
 					STORE     s0, PreviousKeyState	; initial state
 					STORE     s0, PreviousPTTState	; initial state
+					STORE     s0, PreviousFrequency
 					STORE	  s0, KEYS_PRESSED
 					STORE	  s0, KeyPressTimer
 					STORE	  s0, KeyPressFast
@@ -141,9 +143,9 @@ initialise:			LOAD	  s0,00				 ;This is now used to drive LatchOn which latches 
 ;set values for Hey by default
 
 					INPUT	  s0,PTT 	;This is PTT but also has set default frequency bits in bits 1 and 2
-		    	 		SR0	s0
+		    	 	SR0	s0
 					AND	s0,03		
-		;			LOAD   	s0,01		 ;use 1 for Hey, 2 for N2 freq, 3 for 37kHz
+					;LOAD   	s0,01		 ;use 1 for Hey, 2 for N2 freq, 3 for 37kHz
 	 				STORE 	s0,Freq2Set
 					CALL	UpdateFreqRegisters
 
@@ -202,11 +204,21 @@ loop:
 					FETCH	  s5, KEYS_PRESSED	; get the keys pressed mask
 					OR        s5, s1            ; remember which keys have been pressed
 					STORE     s5, KEYS_PRESSED	; remember new state
+
+
+					;;; exceptional problem - force turn off
+					COMPARE   s5, 1F			; all keys have been pressed then force turn off
+					CALL 	  Z,TurnOff		; call the turn off routine					
+
+					COMPARE   s5, 0F			; all keys have been pressed then force turn off
+					CALL 	  Z,TurnOff		; call the turn off routine					
+
 					
 					COMPARE   s1, 00                ; are there any keys pressed now?
 					JUMP      nz, KeyNotChanged     ; skip if keys still pressed
 					;JUMP      nz, CheckPTT          ; skip if keys still pressed
 					
+
 					LOAD      s5, "&"			; key event flag
 					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
 					
@@ -292,7 +304,7 @@ CheckPTT:
 					FETCH     s5, PreviousPTTState
 					COMPARE   s1, s5        ; has it changed
 					
-					JUMP	Z, loop			; loop back if not
+					JUMP	Z, CheckPTTFrequency			; loop back if not
 
 					STORE     s1, PreviousPTTState
 					
@@ -304,32 +316,25 @@ CheckPTT:
 					ADD		  s1, "0"		; PTT pressed = '0'; PTT released = '1'
 					OUTPUT    s1, CmdToUser
 					
-					;COMPARE    s1, 00 ; debug
-					;JUMP       Z, PTTOFF ; debug
+                    ;	  loop  drop through to check frequency
 					
+CheckPTTFrequency:
+                    INPUT	  s1,PTT 	;Read PTT register
+					SR0		s1
+					AND		  s1,03		;Mask frequency bits
+
+					FETCH     s5, Freq2Set
+					COMPARE   s1, s5        ; has it changed
 					
-					; debug 					LOAD	  s5, "r"
-					; debug 					OUTPUT    s5, CmdToUser
+					JUMP	Z, loop			; loop back if not
 					
+					STORE 	s1,Freq2Set
+			
+					LOAD    s0, s1
+					CALL	UpdateFreqRegisters
 					
                     JUMP	  loop
-;PTTOFF:
-					; debug 					LOAD	  s5, "t"
-					; debug 					OUTPUT    s5, CmdToUser
-					
-					
- ;                   JUMP	  loop
 
-					CALL	  delay_1s
-					INPUT	 s5,TouchSignal2
-					AND 	s5,0F
-
-					COMPARE	  s5,0F			;not $F if pressed
-                    RETURN	  Z				;return if key not still pressed
-                    
-
-					CALL 		Z,TurnOff
-					
 
 					
 ;Note key pad bits are: bit3 = On, bit 2 = up, bit 1 = select, bit 0 = down
@@ -337,23 +342,10 @@ CheckPTT:
 TurnOff:		    LOAD	  s0, 00  		    ;This is now used to drive PMOD1 which latches the device on!!
 					OUTPUT	  s0,LatchOn	 	;Latch On if 1
 					RETURN
-										
-					
-upFreq:				FETCH s0,Freq2Set
-					ADD	  s0,01
-					AND   s0,03
-					STORE s0,Freq2Set
-					JUMP  CheckWhichFreq
 
-DownFreq:			FETCH s0,Freq2Set
-					SUB	  s0,01
-					AND   s0,03
-					STORE s0,Freq2Set
-					JUMP  CheckWhichFreq
 					
-					
-					
-CheckWhichFreq:				COMPARE  	s0,00
+CheckWhichFreq:				
+					COMPARE  	s0,00
 					CALL  		Z,ClearFreq				;clear set display
 					COMPARE		s0,01
 					CALL  		Z,SetHeyphoneFreq				;set Hy freq and return
@@ -498,6 +490,9 @@ Respond2FifoW:
 					CALL 		Z,SetN3_31Freq
 		
 					
+					COMPARE	s0, "W"		  ; Z = turn off					
+					CALL 		Z, SendWatchdogReply
+
 					COMPARE	s0, "Z"		  ; Z = turn off					
 					CALL 		Z,TurnOff
 
@@ -513,6 +508,14 @@ Respond2FifoW:
 
 					RETURN
 
+SendWatchdogReply:
+					LOAD      s5, "&"			; 
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					LOAD      s5, "q"			; key pico watchdog reply
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+
+					RETURN
+					
 TurnLCDOn:
 					LOAD	s0, 01
 					OUTPUT	s0, LCDcontrast	 	;

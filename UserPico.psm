@@ -1,3 +1,4 @@
+;GV0C add longer on warble for use with delayed mic audio and with delay 0.5s before turnoff warble
 ;GV0B Getting ToneDetect link to ARM
 ;GV0A redo Target levels in user and DSP for AGC
 ;GV09 changed terminator caracter to LF rather than CR
@@ -109,7 +110,7 @@
 ; Now for Godil Board
 ; Version for multi pico boot with shifted bit offsets on oport
 
-CONSTANT Versionno,			0B               ; 
+CONSTANT Versionno,			0C               ; 
 CONSTANT InitialVolume,			133'd		;lowerred volume
 
 CONSTANT MinoxrVersionno,    EE                 ; Pete
@@ -123,8 +124,8 @@ CONSTANT Bmode,		     00
 ; Set thresholds for AGC
 CONSTANT AGCupperRX,       32                 ; Increased factor 2 on RX and TX with signal level monitor - increased RX 3 again from $18 (24 to 72, ie $48)
 CONSTANT AGClowerRX,       12                 ; was $0C, increased to 36=$24
-CONSTANT AGCupperTX,       40			;Quadrupled target TX values for ADC 17/4/17
-CONSTANT AGClowerTX,       18
+CONSTANT AGCupperTX,       30			;Quadrupled target TX values for ADC 17/4/17 dropped a bit July 2017 from 40 down to 30
+CONSTANT AGClowerTX,       12
 
 ; SAI Set analogue input SAI<xx>  xx=00 or 01
 ; SAO Set audio Output source
@@ -441,6 +442,9 @@ init:               LOAD      ScratchPointer, 00
                     STORE     s0, ADCstate        ; save
                     OUTPUT       s0, ADCstate_port   ; Also sets analogue input to 0
 
+					LOAD      s0, FF
+					STORE     s0, ADCLevel
+					
 startLoop:
 					LOAD      ScratchPointer, 00
 
@@ -506,12 +510,12 @@ loop:               CALL      CheckADClevel
 SendADCToARM:
 					FETCH     s1, peteTXMode
 					COMPARE   s1, 00
-					RETURN    NZ                    ; do not send unless transmitting
+					RETURN    NZ                    ; do not send unless receiving
 
 					LOAD      s6, "&"
                     CALL      Send2UartTX			; send the &
 					
-					LOAD      s6, "e"				; indicates 'earthing' quality
+					LOAD      s6, "v"				; indicates 'earthing' quality
                     CALL      Send2UartTX			; send the &
 					
 					; Byte2Chars takes data in s5 and returns two ascii codes in s6,s7 
@@ -767,11 +771,16 @@ checkTXmode:
 					CALL      SendCRLF
 					
                     CALL      setTXmode           ; so go ahead and set up TX mode
-                    RETURN       
+                    RETURN
+					
+; from ARM - call set TX then jump to start of loop
+setTXmodeARM:
+					CALL	  setTXmode
+					JUMP      startLoop
 
 ; need to set scratch pad mode, set RX freq to 0 (SRF0155), et TX freq to 86.95 STF0E7E, input channel with equivalent of SAI01 and send transmit mode command to DSP
 setTXmode:          
-					;FETCH     s0, Mode
+		    ;FETCH     s0, Mode
                     ;OR        s0, 02               ; set TX bit
                     ;AND       s0, FE             ; reset bit 0 to cancel beacon mode (useful to stop initial beacon setting)
                     ;STORE     s0, Mode
@@ -802,18 +811,18 @@ setTXmode:
 
                     CALL      TX
 					
-                    CALL      Twotone             ; added to give start of message beep
+                    CALL      TripleTwotone             ; added to give longer start of message beep
 
 
-		    LOAD      s6, "$"             ; c/r
-                    CALL      Send2UartTX			; send 
-		    LOAD      s6, "t"             ; c/r
-                    CALL      Send2UartTX			; send 
+		    ;LOAD      s6, "$"             ; debug
+            ;        CALL      Send2UartTX			; send 
+		    ;LOAD      s6, "t"             ; debug
+            ;        CALL      Send2UartTX			; send 
 
-		    LOAD      s6, 0D             ; c/r
-                    CALL      Send2UartTX			; send 
-		    LOAD      s6, 0A             ; c/r
-                    CALL      Send2UartTX			; send 
+		    ;LOAD      s6, 0D             ; c/r
+            ;        CALL      Send2UartTX			; send 
+		    ;LOAD      s6, 0A             ; l/f
+            ;        CALL      Send2UartTX			; send 
 
                     RETURN       
       
@@ -833,12 +842,16 @@ TX:                 LOAD      s5, 49'd              ; Ascii code for '1' - set t
                     RETURN       
 
 
+; from ARM - call set RX then jump to start of loop
+setRXmodeARM:
+					CALL	setRXmode
+					JUMP      startLoop
 					
 ; need to set scratch pad mode, set RX freq to 86.95 (SRF769A or for 87kHz need 76AB), input channel with equivalent of SAI00 and send receive mode command to DSP, set analog gain to 8
-setRXmode:          
-                    ;CALL      Warble             ; added to give start of message beep
-
-					LOAD      s5, 50'd              ; Ascii code for '2' - DSP to grap the AGCvalue before the warble
+;delay about 0.5S before actually returning to receive to allow voice in buffer to be transmitted
+setRXmode:          CALL  delay500ms		;delay added here
+                   
+		    LOAD      s5, 50'd              ; Ascii code for '2' - DSP to grap the AGCvalue before the warble
                     OUTPUT       s5, CMD2DSP         ; send command to DSP
 					
                     ;CALL      Warble             ; added to give start of message beep
@@ -848,8 +861,8 @@ setRXmode:
 
                     CALL      Warble         
 
-					LOAD      s0, 00
-					STORE     s0, peteTXMode
+		    LOAD      s0, 00
+		    STORE     s0, peteTXMode
 
 					
 					;FETCH     s0, Mode
@@ -923,6 +936,32 @@ interploop:         COMPARE      s9, ScratchPointer
                     COMPARE      s0, 90'd              ; is this a Z?
                     JUMP      Z, reboot           ; then go to reboot code (ie to reboot need to send Z<CR>, then do Prog...)
 
+                    LOAD      s6, "?"				;send unknown 3F
+					CALL      Send2UartTX			; send the keypress value
+					
+					LOAD      s6, s0
+					CALL      Send2UartTX			; send the keypress value
+
+                    CALL      getnextscratchchar
+					LOAD      s6, s0
+					CALL      Send2UartTX			; send the keypress value
+
+                    CALL      getnextscratchchar
+					LOAD      s6, s0
+					CALL      Send2UartTX			; send the keypress value
+
+                    CALL      getnextscratchchar
+					LOAD      s6, s0
+					CALL      Send2UartTX			; send the keypress value
+
+                    CALL      getnextscratchchar
+					LOAD      s6, s0
+					CALL      Send2UartTX			; send the keypress value
+
+                    CALL      getnextscratchchar
+					LOAD      s6, s0
+					CALL      Send2UartTX			; send the keypress value
+					
 					CALL      SendCRLF 
 
                     JUMP      startLoop
@@ -932,33 +971,24 @@ MsgFromARM:
 
 					COMPARE      s6, "r" 			;character_r
                     ;CALL      Z, checkRXmode
-                    CALL      Z, setRXmode
+                    JUMP       Z, setRXmodeARM
                     
 					
 					COMPARE      s6, "t"			;character_t
                     ;CALL      Z, checkTXmode					
-                    CALL      Z, setTXmode					
+                    JUMP      Z, setTXmodeARM					
 
                     COMPARE      s6, "c"			;send confidence beep
-                    CALL      Z, Confidence					
+                    JUMP         Z, Confidence					
 
-                    COMPARE      s6, "b"			;send beacon beep
-                    CALL      Z, BeaconBeep	
+                    ;COMPARE      s6, "b"			;send beacon beep
+                    ;CALL      Z, BeaconBeep	
+
+                    COMPARE      s6, "W"			;watchdog check
+                    JUMP         Z, SendWatchdogReply  ; send User pico reply then pass onto Keypad			
 					
-                    COMPARE      s6, "y"			;send LCD on to Keypad
-                    CALL      Z, SendToKeypad					
-
-                    COMPARE      s6, "Y"			;send LCD off to Keypad
-                    CALL      Z, SendToKeypad					
-
-                    COMPARE      s6, "Z"			;send turn radio off to Keypad
-                    CALL      Z, SendTurnOffToKeypad					
-
-
-                    ;LOAD      s6, "$"			;send confidence beep
-					;CALL      Send2UartTX			; send the keypress value
-
-					CALL      SendCRLF 
+					; send everything else to Keypad pico
+                    CALL      SendToKeypad					
 
 					JUMP      startLoop
 
@@ -1352,11 +1382,34 @@ isGV:
                     JUMP      init
 
 
-Twotone:            LOAD      s0, 66'd              ; Block DSPpico
+TripleTwotone:            LOAD      s0, 66'd              ; Block DSPpico
                     OUTPUT       s0, CMD2DSP         ; send B to DSP to block it
 ; need to output TX freq carrier plus 30 then 40 and then return to carrier - now simply as an increment
 
-StartTones:                    LOAD      s0, 53'd
+StartTones:         LOAD      s0, 53'd
+                    OUTPUT       s0, Tone
+
+
+                    CALL      delay_100ms
+
+                    LOAD      s0, 35'd
+                    OUTPUT       s0, Tone
+
+
+                    CALL      delay_100ms
+		    LOAD      s0, 53'd
+                    OUTPUT       s0, Tone
+
+
+                    CALL      delay_100ms
+
+                    LOAD      s0, 35'd
+                    OUTPUT       s0, Tone
+
+
+                    CALL      delay_100ms
+		    
+		    LOAD      s0, 53'd
                     OUTPUT       s0, Tone
 
 
@@ -1412,7 +1465,7 @@ Confidenceloop:
                     OUTPUT       s0, Tone
                     CALL      delay_100ms
 
-		    CALL  Stoptones
+					CALL  Stoptones
 
 
                     ;ADD       s5, 01
@@ -1428,8 +1481,9 @@ Confidenceloop:
 
 					CALL      RX
 					
-                    RETURN       
-
+                    ;RETURN     
+					JUMP      startLoop
+					
 
 
 TurnOffWarble:             
@@ -1511,8 +1565,18 @@ TurnOffWarbleloop:
 
 
 					
-Warble:             
-         LOAD      s0, 66'd              ; Block DSPpico 0x42
+Warble:    
+					;LOAD      ScratchPointer, 00		; effectively ignores command (sB)
+         			
+					;LOAD      s6, 1F  ;"?"             ; ? debug warble start
+                    ;CALL      Send2UartTX
+					;LOAD      s6, 1F  ;"?"             ; ? debug
+                    ;CALL      Send2UartTX
+					;LOAD      s6, 1F  ;"?"             ; ? debug
+                    ;CALL      Send2UartTX
+					;CALL      SendCRLF            ; added to allow get line to read OK
+
+					LOAD      s0, 66'd              ; Block DSPpico 0x42
                     OUTPUT       s0, CMD2DSP         ; send B to DSP to block it
 ; need to output TX freq carrier plus 30 then 40 and then return to carrier - now simply as an increment
 
@@ -1522,12 +1586,15 @@ Warbleloop:         LOAD      s0, 30'd
 
 
                     CALL      delay_100ms
+					
+					CALL      WarbleFlushFIFO
 
                     LOAD      s0, 40'd
                     OUTPUT       s0, Tone
 
 
                     CALL      delay_100ms
+					CALL      WarbleFlushFIFO
 					
 					
                     ADD       s5, 01
@@ -1541,7 +1608,66 @@ Warbleloop:         LOAD      s0, 30'd
                     LOAD      s0, 82'd              ; Un Block DSPpico 0x52
                     OUTPUT       s0, CMD2DSP         ; send R to DSP (release)
 
-                    RETURN       
+					;LOAD      s6, 0F  ;"?"             ; ? debug warble end
+                    ;CALL      Send2UartTX
+					;LOAD      s6, 0F  ;"?"             ; ? debug
+                    ;CALL      Send2UartTX
+					;LOAD      s6, 0F  ;"?"             ; ? debug
+                    ;CALL      Send2UartTX
+					;CALL      SendCRLF            ; added to allow get line to read OK
+
+                    RETURN      
+
+WarbleFlushFIFO:
+                    CALL      getUARTchar
+					
+                    COMPARE      s6, FF
+                    RETURN      Z             ; If no character then done
+					
+                    ;LOAD      s6, s0
+				    CALL      Send2UartTX
+
+                    ;COMPARE      s6, 10'd
+                    ;JUMP      Z, WarbleFlushFIFOLF    ; This is end of command character (LF now! as of Dec 2016)
+                    ;COMPARE      s6, 13'd
+                    ;JUMP      Z, WarbleFlushFIFO             ; If CR ignore
+					
+                    ;COMPARE      ScratchPointer, 16'd  ; Check we are not writing too many characters to the scratchpad
+                    ;JUMP      NC, WarbleFlushFIFO            ; don't write to scratch if Pointer (counter) 16 or above
+					
+                    ;STORE     s6, (ScratchPointer)  ; Save command character
+                    ;ADD       ScratchPointer, 01   ; is a command char so increment
+					
+					JUMP      WarbleFlushFIFO
+
+WarbleFlushFIFOLF:
+					LOAD      s6, "?"             ; ? debug
+                    CALL      Send2UartTX
+					
+					LOAD      S9, 00		; 
+					
+WarbleFlushFIFOLFLoop:
+                    CALL      getnextscratchchar
+					
+					;;;LOAD      s6, s0             ; ? debug
+                    CALL      Send2UartTX
+					
+                    ;COMPARE      s6, 0A               ; is this a LF
+					;JUMP      Z, WarbleFlushFIFOLFDone
+					
+					COMPARE   ScratchPointer, s9    ; check end
+					JUMP      NZ, WarbleFlushFIFO
+
+WarbleFlushFIFOLFDone:				
+					LOAD      s6, 1F  ;"?"             ; ? debug
+                    CALL      Send2UartTX
+					
+                    CALL      SendCRLF            ; added to allow get line to read OK
+
+					LOAD      ScratchPointer, 00		; effectively ignores command (sB)
+					
+					JUMP      WarbleFlushFIFO
+
 
 BeaconBeep:         CALL      TX
                     LOAD      s7, 00
@@ -1582,6 +1708,22 @@ cancelbeacon:       FETCH     s0, Mode
 
                     RETURN       
 
+SendWatchdogReply:			
+					CALL      SendToKeypad
+					
+					LOAD      s6, "&"             ; start of message
+                    CALL      Send2UartTX			; send 
+					LOAD      s6, "p"             ; User Watchdog going
+                    CALL      Send2UartTX			; send 
+
+					LOAD      s6, 0D             ; c/r
+                    CALL      Send2UartTX			; send 
+					LOAD      s6, 0A      
+                    CALL      Send2UartTX			; send 
+					
+					LOAD      s6, "W"				; recover watchdog request from ARM
+					
+					JUMP      startLoop
 
 ; ;;Pete
 ; ;;Pete
@@ -1953,8 +2095,6 @@ getnextscratchchar: FETCH     s0, (s9)
                     ADD       s9, 01               ; increment pointer
                     LOAD      s6, s0
                     
-					CALL      Send2UartTX         ; and echo back to terminal. Message mode					
-
                     RETURN       
 
 
@@ -2022,6 +2162,10 @@ wait_1s:            CALL      delay_1ms
 ; 
 ; Registers used s0, s1, s2, s3 and s4.
 ; 
+delay500ms:	    CALL      delay_100ms
+                    CALL      delay_100ms
+		
+
 delay_300ms:        CALL      delay_100ms
 delay_200ms:        CALL      delay_100ms
                     CALL      delay_100ms

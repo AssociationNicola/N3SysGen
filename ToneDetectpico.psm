@@ -96,7 +96,7 @@ CONSTANT	STPBinc,	40'd
 CONSTANT	SampleCounterMSB, 90'd		;So as to have a 16 bit sample counter
 CONSTANT	StartAmpA,91'd			;Store the amplitude of the startA tone continuosly and output when whoopie.
 
-
+CONSTANT     ToneDetectState, 92'd		; tone detect enabled when 1
 
 
 cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actually a bit less!
@@ -126,12 +126,26 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
                     STORE     s0, STPAinc
 		    LOAD      s0, StopToneBInc               ; Tone increments to detect
                     STORE     s0, STPBinc
-                    
+					
+
+					INPUT    s0, Strobe
+					AND		 s0, 04		; tone detect disabled if set to 1
+
+					STORE     s0, ToneDetectState		; tone detect is disabled if 00
+					
 		    CALL SpeakerOn	;Start with speaker ON !!!!!!!!!!!!!!!!!!!!!!
 
 
 ; Routine to look at lowest bit of Strobe to detect rising edge.
-AwaitAudioVal:	  INPUT     s0, Strobe
+AwaitAudioVal:	  
+					INPUT     s0, Strobe
+                    AND       s0, 04               ; look only at lowest bit
+					FETCH     s1, ToneDetectState
+                    COMPARE   s0, s1
+					
+					CALL	  NZ, ToneDetectStateChanged
+
+					INPUT     s0, Strobe
                     AND       s0, 01               ; look only at lowest bit
                     COMPARE   s0, 01
                     JUMP      Z, AwaitAudioVal    ; if 1 wait...
@@ -542,8 +556,26 @@ checkStoptoneAtimeout:		FETCH s0,SampleCounterMSB	;Get counter
 
 			
 
+ToneDetectStateChanged:
+					STORE     s0, ToneDetectState
+			    
+					CALL SpeakerOff		;will turn off speaker if tone detect selected
+										; will turn on speaker if tone detect disabled
+				
+					RETURN
 
-SpeakerOn:			LOAD     s0,01
+
+SpeakerOn:			
+				INPUT    s0, Strobe
+				AND		 s0, 04		; tone detect disabled if set to 1
+
+				JUMP     NZ, TDIsOff			; not control if Tone detect not enabled
+				
+				;FETCH    s0, ToneDetectEnabled
+				;ADD      s0, 00
+				;RETURN   Z
+				
+				LOAD     s0,01
                                 OUTPUT s0,State
                                                                
                                 LOAD      s0, 43'd              ; 
@@ -556,11 +588,25 @@ SpeakerOn:			LOAD     s0,01
 
 
 
-
-
-				
+TDIsOff:
+				LOAD     s0,01			; make sure speaker is on
+                OUTPUT s0,State
+								
+				LOAD      s0, 50'd              ; tell user pico
+                OUTPUT    s0, CmdToUser
+				RETURN
      
-SpeakerOff:                    LOAD     s0,02                      ;Turns Green LED off (bit 1)? and stops speaker (currently driven directly off not speaker enable)
+SpeakerOff:
+				INPUT    s0, Strobe
+				AND		 s0, 04		; tone detect disabled if set to 1
+
+				JUMP     NZ, TDIsOff			; not control if Tone detect not enabled
+
+				;FETCH    s0, ToneDetectEnabled
+				;ADD      s0, 00
+				;RETURN   Z
+				
+                    LOAD     s0,02                      ;Turns Green LED off (bit 1)? and stops speaker (currently driven directly off not speaker enable)
                                OUTPUT s0,State
                                LOAD     Mode,00                              ;return to idle state
                                                                
