@@ -757,12 +757,12 @@ SkipNoBT:
 ;need to make sure that s3/s2 and s1/s0 DO NOT EXCEED $3000, ie 48 in the MSBs!
 				   CALL	  cordic		  ;This is upsettng the AGC when sinectr used sB!
 
-;April 2017 try to stop tx saturation
+;April 2017 try to stop tx saturation. - July cancel 2 of the doublings (in case a problem of noise at low mic signal!)
 					CALL TryAndDouble	;Bump amplitude to saturate! (Jan 2016)
 					CALL TryAndDouble
-					CALL TryAndDouble
-					CALL TryAndDouble
-;					CALL TryAndDouble	;try add for upgrade of production code
+;					CALL TryAndDouble
+;					CALL TryAndDouble
+					CALL TryAndDouble	;try add for upgrade of production code TRY ADDING AGAIN (Sept 17)
 					
 					
 								   		   	

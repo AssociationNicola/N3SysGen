@@ -108,7 +108,7 @@ CONSTANT    KeyPressTimer,			14      ; 20d
 CONSTANT    KeyPressFast,			15      ; 21d
 CONSTANT    KeyPressFastLeadIn,		16      ; 22d
 
-
+CONSTANT	KeypadCheckingState,    17      ; 23d
 
 ;;;GenerateCode        MEM       "KeyPadProg.mem"
 
@@ -127,7 +127,7 @@ initialise:			LOAD	  s0,00				 ;This is now used to drive LatchOn which latches 
 					STORE	  s0, KEYS_PRESSED
 					STORE	  s0, KeyPressTimer
 					STORE	  s0, KeyPressFast
-
+					STORE     s0, KeypadCheckingState
 
 					CALL	  delay_1s		 	;Wait so it doesn't detect as turn off
 
@@ -213,11 +213,15 @@ loop:
 					COMPARE   s5, 0F			; all keys have been pressed then force turn off
 					CALL 	  Z,TurnOff		; call the turn off routine					
 
+					FETCH     s9, KeypadCheckingState  ; are we checking the keypad operation?
+					COMPARE   s9, 00                   ;
+					JUMP      NZ, SendKeychangeAnyway  ; send key operation if we are
 					
 					COMPARE   s1, 00                ; are there any keys pressed now?
 					JUMP      nz, KeyNotChanged     ; skip if keys still pressed
 					;JUMP      nz, CheckPTT          ; skip if keys still pressed
 					
+SendKeychangeAnyway:
 
 					LOAD      s5, "&"			; key event flag
 					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
@@ -462,8 +466,12 @@ UpdateFreqRegisters:
 					RETURN
 
 
+;  flag that we are checking the keypad operation
+SetKeypadCheck:
+					LOAD      s0, 01
+					STORE     s0, KeypadCheckingState
 
-	
+					RETURN	
 
 
 
@@ -488,6 +496,9 @@ Respond2FifoW:
 
 					COMPARE	s0, "F"		  	;#define SEND_FREQUENCY_31KHZ	('F')
 					CALL 		Z,SetN3_31Freq
+		
+					COMPARE	s0, 7E		  	;#define SEND_KEYPAD_CHK_MODE	(0x7E)
+					CALL 		Z,SetKeypadCheck
 		
 					
 					COMPARE	s0, "W"		  ; Z = turn off					

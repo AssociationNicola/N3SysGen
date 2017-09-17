@@ -896,6 +896,14 @@ setRXmode:          CALL  delay500ms		;delay added here
                     STORE     s0, ADCAGCLowerThreshold
 
                     CALL      RX
+					
+					LOAD      s6, "&"
+                    CALL      Send2UartTX			; send the &
+					
+					LOAD      s6, "s"				; tell ARM warble is transmitted
+                    CALL      Send2UartTX			; 
+					
+					CALL      SendCRLF 
 
                     RETURN       
 

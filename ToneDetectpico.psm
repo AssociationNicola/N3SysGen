@@ -559,8 +559,7 @@ checkStoptoneAtimeout:		FETCH s0,SampleCounterMSB	;Get counter
 ToneDetectStateChanged:
 					STORE     s0, ToneDetectState
 			    
-					CALL SpeakerOff		;will turn off speaker if tone detect selected
-										; will turn on speaker if tone detect disabled
+					CALL SpeakerOn		; always set speaker on if changed
 				
 					RETURN
 
@@ -591,7 +590,10 @@ SpeakerOn:
 TDIsOff:
 				LOAD     s0,01			; make sure speaker is on
                 OUTPUT s0,State
-								
+				
+                LOAD      s0, 43'd              ; 
+                OUTPUT    s0, CmdToUser
+ 								
 				LOAD      s0, 50'd              ; tell user pico
                 OUTPUT    s0, CmdToUser
 				RETURN
