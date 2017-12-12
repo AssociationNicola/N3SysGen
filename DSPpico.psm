@@ -1,4 +1,4 @@
-;GV0B  To add code to take into account amplitude of start tone detected to adjust AGC, attack 32ms decay 1024ms
+;GV0B  To add code to take into account amplitude of start tone detected to adjust AGC, attack 32ms decay 1024ms BT mic routed through AGC MUX
 ;GV07 correct incorrect data archive and demod peak display problem (MSB/LSB mixup!)
 ;GV06 increase SSB amplitude on TX
 ;GV03 corrected OutAmp doubling and increased speaker volume
@@ -143,7 +143,7 @@ CONSTANT	BTaudioMSB,		6'd                   ; Input from headset micro
 CONSTANT	BTaudioLSB,		7'd                   ; 
 CONSTANT	SaturationBits,		8'd					  ;lowest 3 bits are the top 3 bits of the 18bit demod signal (indicate saturation) - the top 5 bits are zeros
 CONSTANT	RAMdataLSB,		9'd
-CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone, bit 2 is TX_high, bit 3 is speaker on (from tone detect)
+CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone, bit 2 is TX_high, bit 3 is signal received on (from tone detect not used Nov 2017)
 CONSTANT	StartToneAmp,		11'd
 
 
@@ -409,8 +409,8 @@ HaveInput:                    FETCH     s3, AGCvalue		;This needs to be correcte
 		 				    OUTPUT    s1, MSBAudio	   
           					    OUTPUT    s0, LSBAudio
 
-; 						CALL	AudioDouble		   ;increase volume 6 dB! Add 2 of these 26/2/15
-; 						CALL	AudioDouble		   ;increase volume 12 dB! Add may 16
+ 						CALL	AudioDouble		   ;Add 12dB back in Nov 2017 to increase received BT volume
+ 						CALL	AudioDouble		   ;increase volume 12 dB! Add may 16
  ;						CALL	AudioDouble		   ;increase volume 12 dB! 
 
 ;						AND	s0, f8			;Make bottom 3 bits zero in case is 13 bit linear and these are attenuation bits
@@ -882,9 +882,9 @@ AGC:   				INPUT 	s2,Status
 				AND	s2,06	 ;look at bit 1 and 2
 					
 ;In this version switching to BT input is through external multiplexer to go through emphasis filter
-				COMPARE s2,04	 ;True if BT signal present and TX_high
+				COMPARE s2,04	 ;True if TX_high - only look at bit 2
 					
-				RETURN Z   ;Don't do anything if on BT and TX_high
+				RETURN Z   ;Don't do anything if TX_high
 	   	   	        OUTPUT		  s3,MUXport		  ;Now simply use middle 4 bits to drive the MUX (or 'AGCvalue' in sysgen model) (this had been lower in the program and used the lowest bits)
 	   		   	
 				SRX		  s3   	 			  ;divide s3 by 2 to get last AGC and put last bit into carry

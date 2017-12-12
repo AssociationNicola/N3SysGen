@@ -64,7 +64,7 @@ CONSTANT	BRAMaddrLSB,		3'd
 ;also used:8,9,13,14,18,19,23,24 -  8 STRTA,13  STRTB ,18 STPA or 23  STPB, and 9 STRTA,14  STRTB ,19 STPA or 24  STPB
 ; 6,11,16,21 used for running Itone values and 7,12,17,22 for Qtone values
 CONSTANT	StartAmpOut,	25'd		;goes to DSP pico to calibrate AGC
-CONSTANT	State,		26'd		;Bit 0 enables speaker, Bit 1 is green light
+CONSTANT	State,		26'd		;Bit 0 enables speaker, Bit 1 is green light, Bit 2 Tone detect off
 
 
 ; Scratchpad registers
@@ -96,7 +96,7 @@ CONSTANT	STPBinc,	40'd
 CONSTANT	SampleCounterMSB, 90'd		;So as to have a 16 bit sample counter
 CONSTANT	StartAmpA,91'd			;Store the amplitude of the startA tone continuosly and output when whoopie.
 
-CONSTANT     ToneDetectState, 92'd		; tone detect enabled when 1
+;CONSTANT     ToneDetectState, 92'd		; tone detect enabled when 1 - NOT USED
 
 
 cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actually a bit less!
@@ -129,21 +129,28 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
 					
 
 					INPUT    s0, Strobe
-					AND		 s0, 04		; tone detect disabled if set to 1
-
-					STORE     s0, ToneDetectState		; tone detect is disabled if 00
+;					AND		 s0, 04		; tone detect disabled if set to 1
+;
+;					STORE     s0, ToneDetectState		; tone detect is disabled if 04
 					
-		    CALL SpeakerOn	;Start with speaker ON !!!!!!!!!!!!!!!!!!!!!!
+;		    CALL SpeakerOn	;Start with speaker ON !!!!!!!!!!!!!!!!!!!!!!
 
 
 ; Routine to look at lowest bit of Strobe to detect rising edge.
-AwaitAudioVal:	  
-					INPUT     s0, Strobe
-                    AND       s0, 04               ; look only at lowest bit
-					FETCH     s1, ToneDetectState
-                    COMPARE   s0, s1
+AwaitAudioVal:	 
+
+
+ 
+;					INPUT     s0, Strobe
+;Tone detect is no longer disabled by this pico - is disabled directly in logic
+;                    AND       s0, 04               ; look only at lowest bit
+;					FETCH     s1, ToneDetectState
+;                    COMPARE   s0, s1
 					
-					CALL	  NZ, ToneDetectStateChanged
+;					CALL	  NZ, ToneDetectStateChanged
+
+
+
 
 					INPUT     s0, Strobe
                     AND       s0, 01               ; look only at lowest bit
@@ -556,19 +563,19 @@ checkStoptoneAtimeout:		FETCH s0,SampleCounterMSB	;Get counter
 
 			
 
-ToneDetectStateChanged:
-					STORE     s0, ToneDetectState
-			    
-					CALL SpeakerOn		; always set speaker on if changed
-				
-					RETURN
+;ToneDetectStateChanged:
+;					STORE     s0, ToneDetectState
+;			    
+;					CALL SpeakerOn		; always set speaker on if changed
+;				
+;					RETURN
 
 
 SpeakerOn:			
-				INPUT    s0, Strobe
-				AND		 s0, 04		; tone detect disabled if set to 1
+;				INPUT    s0, Strobe
+;				AND		 s0, 04		; tone detect disabled if set to 1
 
-				JUMP     NZ, TDIsOff			; not control if Tone detect not enabled
+;				JUMP     NZ, TDIsOff			; not control if Tone detect not enabled
 				
 				;FETCH    s0, ToneDetectEnabled
 				;ADD      s0, 00
@@ -587,28 +594,31 @@ SpeakerOn:
 
 
 
-TDIsOff:
-				LOAD     s0,01			; make sure speaker is on
-                OUTPUT s0,State
-				
-                LOAD      s0, 43'd              ; 
-                OUTPUT    s0, CmdToUser
- 								
-				LOAD      s0, 50'd              ; tell user pico
-                OUTPUT    s0, CmdToUser
-				RETURN
+;TDIsOff:
+;				LOAD     s0,01			; make sure speaker is on
+ ;               OUTPUT s0,State
+;				
+ ;               LOAD      s0, 43'd              ; 
+  ;              OUTPUT    s0, CmdToUser
+ ;								
+;				LOAD      s0, 50'd              ; tell user pico
+ ;               OUTPUT    s0, CmdToUser
+;				RETURN
      
 SpeakerOff:
-				INPUT    s0, Strobe
-				AND		 s0, 04		; tone detect disabled if set to 1
 
-				JUMP     NZ, TDIsOff			; not control if Tone detect not enabled
-
+;				INPUT    s0, Strobe
+;				AND		 s0, 04		; tone detect disabled if set to 1
+;
+;				JUMP     NZ, TDIsOff			; not control if Tone detect not enabled
+;
 				;FETCH    s0, ToneDetectEnabled
 				;ADD      s0, 00
 				;RETURN   Z
+
+
 				
-                    LOAD     s0,02                      ;Turns Green LED off (bit 1)? and stops speaker (currently driven directly off not speaker enable)
+                    		LOAD     s0,00                      ;sets signal detected state to off
                                OUTPUT s0,State
                                LOAD     Mode,00                              ;return to idle state
                                                                
