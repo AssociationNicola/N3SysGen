@@ -1,0 +1,21 @@
+--------------------------------- Version Log ----------------------------------
+Version                                 Path
+System Generator 2016.2                 /opt/Xilinx/Vivado/2016.2
+Matlab 8.4.0.150421 (R2014b)            /usr/local/MATLAB/R2014b
+Vivado 2016.2                           /opt/Xilinx/Vivado/2016.2
+--------------------------------------------------------------------------------
+Summary of Errors:
+Error 0001: Input data type for port "in_port" must have width=8.
+     Block: 'N3Z_tonetestProblem/DSProcessor1/PicoBlaze6'
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'N3Z_tonetestProblem/DSProcessor1/PicoBlaze6'
+
+Details:
+Input data type for port "in_port" must have width=8.
+Error occurred during "Rate and Type Propagation".
+
+--------------------------------------------------------------------------------

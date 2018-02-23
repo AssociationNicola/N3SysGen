@@ -59,12 +59,12 @@ CONSTANT	TBD2,			7'd				  ;TBdefined
 
 CONSTANT	CmdToUser,		0'd
 CONSTANT	LOMSB,			1'd
-CONSTANT	BRAMaddrMSB,		2'd		;Not currently used (Feb '17)
-CONSTANT	BRAMaddrLSB,		3'd
+CONSTANT	ToneMode,		2'd		
+CONSTANT	BRAMaddrLSB,		3'd	;Not currently used (Feb '17)
 ;also used:8,9,13,14,18,19,23,24 -  8 STRTA,13  STRTB ,18 STPA or 23  STPB, and 9 STRTA,14  STRTB ,19 STPA or 24  STPB
 ; 6,11,16,21 used for running Itone values and 7,12,17,22 for Qtone values
 CONSTANT	StartAmpOut,	25'd		;goes to DSP pico to calibrate AGC
-CONSTANT	State,		26'd		;Bit 0 enables speaker, Bit 1 is green light, Bit 2 Tone detect off
+CONSTANT	State,		26'd		;Bit 0 N3signalReceived, Bit 1 is not used, Bit 2 Tone detect off
 
 
 ; Scratchpad registers
@@ -133,12 +133,12 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
 ;
 ;					STORE     s0, ToneDetectState		; tone detect is disabled if 04
 					
-;		    CALL SpeakerOn	;Start with speaker ON !!!!!!!!!!!!!!!!!!!!!!
+;		    CALL N3ZtoneDetected	;Start with speaker ON !!!!!!!!!!!!!!!!!!!!!!
 
 
 ; Routine to look at lowest bit of Strobe to detect rising edge.
 AwaitAudioVal:	 
-
+				OUTPUT Mode,ToneMode	;Make mode value available outside			
 
  
 ;					INPUT     s0, Strobe
@@ -174,6 +174,10 @@ isReceiving:
  		ADD  SampleTimer,01		;Always increment timer in receive mode
 		COMPARE Mode,04
 		JUMP  NZ,StartDemod		;has not just come out of TX
+;Only do this bit once when going from Transmit mode (Mode 4) to Receive.
+		CALL delay_100ms		;has just come out of TX so wait a bit before detecting tones GN ?????? is this needed???????
+		CALL	N3ZtoneLost	;Make sure tone detect is off
+
 		LOAD Mode,00			;has just come out of TX, so reset mode to idle
 
 
@@ -508,7 +512,7 @@ isStrtToneA:		COMPARE Mode,00		;Check if currently idle
 isStrtToneB:		COMPARE Mode,01		;Check if in starting mode
 			RETURN	NZ		;Don't do anything if not starting
 			LOAD Mode,02		;go ahead in to receive
-			CALL SpeakerOn		;Turn on speaker
+			CALL N3ZtoneDetected		;N3Z transmission detected
 			LOAD SampleCounter,00
 			STORE SampleCounter,SampleCounterMSB	;Reset counter and allow about 160ms to receive tone B
 			RETURN
@@ -523,10 +527,10 @@ isStopToneA:		COMPARE Mode,02		;Check if in RX mode
 isStopToneB:		COMPARE Mode,03		;Check if in stopping mode
 			RETURN	NZ		;Don't do anything if not stopping
 			LOAD Mode,00		;go back to idle
-			CALL delay_1s		;dont turn speaker off immediately immediately
-			CALL delay_1s		;dont turn speaker off immediately immediately
+			CALL delay_1s		;dont indicate N3Z transmission detected yet
+			CALL delay_1s		;in a bit...
 
-			CALL SpeakerOff		;Turn speaker off
+			CALL N3ZtoneLost		;Turn N3Z transmission detected off
 			LOAD SampleCounter,00
 			STORE SampleCounter,SampleCounterMSB	;Reset counter (not really needed, but just for tidiness)
 			RETURN
@@ -551,13 +555,13 @@ checkRXtimeout:			FETCH s0,SampleCounterMSB	;Get counter
 				COMPARE s0,61'd	;-about 30 secs - COmpare with 122'd if using 8 tones
 				RETURN 	C	;Can carry on listening (not timed out)
 				LOAD	Mode,00	;Set mode back to idle - seems to have been transmitting too long
-				CALL	SpeakerOff	;on stop speaker again
+				CALL	N3ZtoneLost	;stop N3Z transmission detected (timeout)
 				RETURN
 
 
 checkStoptoneAtimeout:		FETCH s0,SampleCounterMSB	;Get counter
 				COMPARE s0,01	;-about 512ms - need to compare with 02 if using 8 tones
-				RETURN	C	;Counter MSB still 0 so within 512ms of receiving StoptoneB
+				RETURN	C	;Counter MSB still 0 so within 512ms of receiving StoptoneA
 				LOAD	Mode,02	;Set mode back to RX - tone B was not received in time so must have been a chance tone
 				RETURN
 
@@ -566,12 +570,12 @@ checkStoptoneAtimeout:		FETCH s0,SampleCounterMSB	;Get counter
 ;ToneDetectStateChanged:
 ;					STORE     s0, ToneDetectState
 ;			    
-;					CALL SpeakerOn		; always set speaker on if changed
+;					CALL N3ZtoneDetected		; always set N3Z transmission detected on if changed
 ;				
 ;					RETURN
 
 
-SpeakerOn:			
+N3ZtoneDetected:			
 ;				INPUT    s0, Strobe
 ;				AND		 s0, 04		; tone detect disabled if set to 1
 
@@ -582,7 +586,7 @@ SpeakerOn:
 				;RETURN   Z
 				
 				LOAD     s0,01
-                                OUTPUT s0,State
+                                OUTPUT s0,State			;N3Z signal being received flag on
                                                                
                                 LOAD      s0, 43'd              ; 
                                 OUTPUT    s0, CmdToUser
@@ -605,7 +609,7 @@ SpeakerOn:
  ;               OUTPUT    s0, CmdToUser
 ;				RETURN
      
-SpeakerOff:
+N3ZtoneLost:
 
 ;				INPUT    s0, Strobe
 ;				AND		 s0, 04		; tone detect disabled if set to 1

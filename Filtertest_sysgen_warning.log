@@ -1,0 +1,7 @@
+Warning:
+ code:     
+ severity: L2
+ open_fcn:   
+ summary:  Ignoring Latency for fixed point Accumulator block
+ details:  Fixed point Accumulator Block supports only latency with value '1'
+

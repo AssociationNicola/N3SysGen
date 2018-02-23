@@ -1,0 +1,2576 @@
+; ;;
+; ;; BT Pico Code for picoblaze
+; ;;
+; ;; BT PicoBlaze download to handle connection to a single headset.
+; ;;
+; ;; Created March 2012, (c) Nicola Project, Graham Naylor, Pete Allwright
+; ;;
+; ;;
+; ;; Version History
+; ;; ===============
+; ;;
+; ;; April 2012    PA    Original version for single headset
+; ;;                     This module supports upto 3 connections in Software
+; ;;                     Supports HFP and HSP headsets
+; ;;
+; ;; April 2014    PA    Re-worked following testing.
+; ;;                     New compile and build procedure - separate headers etc.
+; ;;                     Multiple PIN codes.
+
+; 
+; 
+; 
+
+; ;; Up to 3 connections can be made. Presently only one can be active at once.
+; ;; If a headset transmits then it will receive the reply audio stream.
+
+; ;;
+; ;; Messages:
+; ;;
+; ;;
+; ;; TRANSMIT_ON      - tell User Pico we are transmitting
+; ;; TRANSMIT_OFF     - tell User Pico we have stopped transmitting
+; ;;
+; ;; RECEIVE_ON      - temp from User - indicates N3 receiving (carrier detect)
+; ;; RECEIVE_OFF     - temp from User - indicates N3 not now receiving
+; ;;
+
+
+CONSTANT TRANSMIT_ON,	14                 ; BT -> User and User -> BT
+CONSTANT TRANSMIT_OFF,	15                 ; BT -> User and User -> BT
+
+
+;GenerateCode        MEM       "BluetoothMain.mem"
+
+
+; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 
+; CopyMACFromLink.
+; 
+; copy currently selected MAC to scratchpad
+; 
+; 	s6 = address to which the MAC address should be copied
+; 
+
+CONSTANT FIRST_CHANNEL,		1'd
+CONSTANT SECOND_CHANNEL,	2'd
+CONSTANT THIRD_CHANNEL,		3'd
+
+CONSTANT MAC_ADDRESS_LENGTH,	18'd
+
+
+; input registers
+
+CONSTANT USER_RX_REG, 		00                   ; Receive characters from main pico
+
+CONSTANT RAM_DataIn_LSB, 	01                   ; User Ram data is in last 256 16bit words
+CONSTANT RAM_DataIn_MSB, 	02
+
+CONSTANT BT_RX_REG,			03
+
+CONSTANT BT_STATUS_REG,		04
+; bit offsets
+CONSTANT BT_RX_DATA,		01                   ; character received from Blue Giga
+CONSTANT BT_TX_FULL,		02                   ; fifo to Blue Giga half full
+CONSTANT BT_RTS,			04                   ; not used presently - should be masked
+CONSTANT USER_TX_FULL,		08
+
+
+; output registers
+
+CONSTANT BT_TX_REG,			02
+CONSTANT USER_TX_REG,		03
+
+CONSTANT RAM_Addr_MSB,		04                   ; Address last 256 bits of program memory
+CONSTANT RAM_Addr_LSB,		05                   ; Only lower 16 bits used
+
+
+; ;; Scratchpad Layout
+
+CONSTANT InquiryPeriodDelay, 	0'd
+
+CONSTANT GlobalTimerLow,		1'd
+CONSTANT GlobalTimerMiddle,		2'd
+CONSTANT GlobalTimerUpper,		3'd
+
+CONSTANT InquiryPollingTimeout,	8'd
+
+CONSTANT TempStore,				9'd
+
+CONSTANT HeadsetMACAddress1,	10'd
+CONSTANT HeadsetMACAddress2,	30'd			; HeadsetMACAddress1 + 20
+CONSTANT HeadsetMACAddress3,	50'd			; HeadsetMACAddress2 + 20
+
+CONSTANT NextSlot,				70'd			; HeadsetMACAddress3 + 20; ends at 69
+
+
+CONSTANT BluegigaCurrentPos,         70'd
+CONSTANT ProcessBGMessage,           71'd
+CONSTANT BluegigaCharCount,          72'd
+
+CONSTANT BufferPointer,              73'd
+
+
+CONSTANT HFP_AG_Type,                1'd
+CONSTANT HSP_AG_Type,                2'd
+CONSTANT ComputerType,               3'd
+
+CONSTANT ConnectType1,               74'd
+CONSTANT ConnectType2,               75'd
+CONSTANT ConnectType3,               76'd
+
+
+CONSTANT ControlChannel1,            77'd
+CONSTANT ControlChannel2,            78'd
+CONSTANT ControlChannel3,            79'd
+
+CONSTANT AudioChannel1,              80'd
+CONSTANT AudioChannel2,              81'd
+CONSTANT AudioChannel3,              82'd
+
+
+CONSTANT IndexSelected,              83'd
+CONSTANT CurrentChannel,             84'd
+CONSTANT CurrentAudio,               85'd
+CONSTANT CurrentType,                86'd
+
+
+CONSTANT Transmitting,               87'd
+CONSTANT Receiving,                  88'd
+
+CONSTANT PinCodeSelected,            89'd
+
+
+CONSTANT BluegigaInStart,            90'd                  ; RESERVE 	60 BluegigaInEnd	; reserve area for incoming Bluetooth message					
+
+CONSTANT BLUEGIGA_IN_BUF_SIZE,       36'd                  ; Max Bluegiga input buffer
+
+CONSTANT BluegigaInEnd,              126'd				; 91 + BLUEGIGA_IN_BUF_SIZE; ends at 90 + 36 = 126  - now 127
+
+
+
+
+
+EntryPoint: 
+
+; wait for GO from User chip
+
+; IN        sF, USER_RX_REG    ; Check if FIFO character present
+; COMP      sF, 128             ; is there a character?
+; JUMP      NC, EntryPoint      ; get byte from user
+
+                    LOAD      sF, 00               ; value to be stored
+                    LOAD      s1, 00               ; store address pointer
+
+ClearScratchpad: 
+                    STORE     sF, (s1)              ; store in this scratchpad address
+                    ADD       s1, 01               ; next scratchpad address
+                    COMPARE   s1, 40             	; end of scratchpad?
+                    JUMP      NZ, ClearScratchpad ; loop if not
+
+                    LOAD      sF, BluegigaInStart ; initialise circular input buffer parameters
+                    STORE     sF, BluegigaCurrentPos; ditto
+                    STORE     sF, ProcessBGMessage; ditto
+
+
+; ;;
+; ;;	Send initial (configuration) messages to the Bluegiga
+; ;;
+
+L1: 
+
+                    CALL      Delay1Second
+; CALL      Delay1Second
+; CALL      Delay1Second
+; CALL      Delay1Second
+; CALL      Delay1Second
+
+
+                    LOAD      s3, 00               ; index of startup messages
+
+
+_InitialMessagesNext: 
+
+                    LOAD      sE, StartupMessages; message table
+                    LOAD      sF, StartupMessagesLower; ditto 16 bit address in RAM
+                    ;LOAD      sF, StartupMessages>>8; ditto 16 bit address in RAM
+
+                    ADD       sE, s3              ; current pair
+                    ADDCY     sF, 00               ; 16 bit arithmetic					
+
+                    CALL      ReadFromRAMBlock    ; reads from RAM address IN: sE(low), sF; RETURNS chars in sA (low) and sB (high)
+
+                    LOAD      s1, sA              ; save it - lower byte
+                    LOAD      s2, sB              ; save it - upper byte
+
+                    LOAD      s6, s1              ; copy first byte to process
+                    COMPARE   s1, FF             ; is it the end of messages
+                    JUMP      Z, _InitialMessagesDone; exit if so
+
+                    CALL      SendMessageToBluegiga; else send the message
+
+                    LOAD      s6, s2              ; copy second byte to process
+                    COMPARE   s2, FF             ; is it the end of messages
+                    JUMP      Z, _InitialMessagesDone; exit if so
+
+                    CALL      SendMessageToBluegiga; else send the message
+
+                    ADD       s3, 01               ; next pair of initial messages
+
+                    CALL      delay_100ms         ; uses sC -> sF
+
+                    JUMP      _InitialMessagesNext; next
+
+
+; ;;
+; ;;   Initial configuration messages sent to Bluegiga.
+; ;;   Now go to Bluetooth processing mode.
+; ;;
+
+_InitialMessagesDone: 
+
+                    CALL      ReadMessageFromBluegiga; poll Bluegiga and build an incoming message
+
+                    LOAD      sF, BluegigaInStart ; initialise circular input buffer parameters
+                    STORE     sF, BluegigaCurrentPos; ditto
+                    LOAD      sF, 00
+                    STORE     sF, BluegigaCharCount
+
+                    LOAD      sF, 05
+                    STORE     sF, InquiryPeriodDelay	; reset clocking
+					
+                    LOAD      sF, 06						; 6 per minute so this takes 1 minutes
+					STORE     sF, InquiryPollingTimeout		; maximum attempts to connect = about 5 minutes  
+
+MainProcessingLoop: 
+
+                    CALL      ReadMessageFromBluegiga; poll Bluegiga and build an incoming message
+                    CALL      Z, ProcessMessageFromBluegiga; Handle the completed message
+
+                    CALL      ReadMessageFromUserPico; poll User to BT FIFO and build an incoming message
+                    CALL      Z, ProcessMessageFromUserPico; Handle the completed message
+
+                    CALL      ProcessOneSecond    ; periodic functions
+
+                    JUMP      MainProcessingLoop  ; loop for next cycle
+
+
+ProcessOneSecond: 
+                    FETCH     sD, GlobalTimerLow
+                    FETCH     sE, GlobalTimerMiddle
+                    FETCH     sF, GlobalTimerUpper
+
+                    ADD       sD, 01               ; count up the...
+                    ADDCY     sE, 00               ; ... 1 second counter
+                    ADDCY     sF, 00
+
+                    STORE     sD, GlobalTimerLow  ; store back 1 second timer
+                    STORE     sE, GlobalTimerMiddle
+                    STORE     sF, GlobalTimerUpper
+
+                    COMPARE   sE, FF             ; look for 1/10th second ish
+                    JUMP      NZ, _GlobalTimeNOTExpired
+                    COMPARE   sD, FF             ; look for 1/10th second ish
+                    JUMP      NZ, _GlobalTimeNOTExpired
+
+                    COMPARE   sF, 0E             ; gives approx 1 second tick
+                    JUMP      NZ, _GlobalTimeNOTExpired
+
+
+; ;; Do 1 second approx timed functions
+
+                    LOAD      sA, "*"             ; debugging visiblilty
+                    CALL      SendToUserPico      ; debugging visibility
+
+                    CALL      SendInquiryMessage  ; check and send INQUIRY 5
+
+                    LOAD      sF, 00               ; clear sF
+                    STORE     sF, GlobalTimerLow  ; restart
+                    STORE     sF, GlobalTimerMiddle; timer
+                    STORE     sF, GlobalTimerUpper; ditto
+
+                    RETURN       
+
+_GlobalTimeNOTExpired: 
+
+                    RETURN       
+
+
+ReadMessageFromUserPico: 
+                    LOAD      sF, 01
+                    ADD       sF, 01
+                    RETURN       
+
+ProcessMessageFromUserPico: 
+
+                    RETURN       
+
+; ;;============================================================================
+; ;;============================================================================
+; ;;============================================================================
+; ;; Handle a message from the Bluegiga
+; ;;
+; ;;
+ProcessMessageFromBluegiga: 
+
+                    LOAD      sE, BluegigaInStart ; start of in message
+                    STORE     sE, ProcessBGMessage; save current message pointer				
+
+; LOAD      sC, BluegigaInStart ; beginning of message
+; LOAD      s6, ReadyMsg        ; is this a READY. reply
+; CALL      MatchMessageToString
+; JUMP      Z, HandleReadyMsg ; process READY message
+
+
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, InquiryReply    ; is this a Inquiry reply
+                    CALL      MatchMessageToString
+                    JUMP      Z, HandleInquiryReply; jump to process INQUIRY reply
+
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, PairReply       ; is this a PAIR message
+                    CALL      MatchMessageToString
+                    JUMP      Z, HandlePairReply  ; jump to process PAIR message
+
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, CallReplyMsg    ; is this a CALL reply
+                    CALL      MatchMessageToString
+                    JUMP      Z, HandleCallMsgReply; jump to process CALL reply
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, RingMsg         ; is this a RING reply
+                    CALL      MatchMessageToString
+                    JUMP      Z, HandleRingMsgReply; jump to process RING reply
+
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, ConnectHSPMsg   ; is this a CONNECT reply
+                    CALL      MatchMessageToString
+                    JUMP      Z, HandleConnectHSPMsgReply; jump to process CONNECT reply
+
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, ConnectSCOMsg   ; is this a CONNECT reply
+                    CALL      MatchMessageToString
+; JUMP      Z, HandleConnectHSPMsgReply  ; jump to process CONNECT reply
+                    JUMP      Z, _ProcMessClean   ; jump to ignore
+
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, ConnectMsg      ; is this a CONNECT reply
+                    CALL      MatchMessageToString
+                    JUMP      Z, HandleConnectMsgReply; jump to process CONNECT reply
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, HFP_AG_Ready_Msg; is this a HFP-AG ready
+                    CALL      MatchMessageToString
+                    JUMP      Z, Handle_HFP_AG_Ready_MsgReply; jump to process HFP-AG reply
+
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, HSP_Button_Msg  ; is this a HSP Button pressed
+                    CALL      MatchMessageToString
+                    JUMP      Z, Handle_HSP_Button_Msg; jump to process HFP-AG Dial Last
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, HFP_AG_Dial_Last; is this a HFP-AG Dial Last
+                    CALL      MatchMessageToString
+                    JUMP      Z, Handle_HFP_AG_DialLast_Msg; jump to process HFP-AG Dial Last
+
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    LOAD      s6, NoCarrierMsg    ; is this a No Carrier msg - Blue Connection gone
+                    CALL      MatchMessageToString
+                    JUMP      Z, Handle_NoCarrierMsg; jump to process HFP-AG Dial Last
+
+
+; LOAD      sC, BluegigaInStart ; beginning of message
+; LOAD      s6, HFP_AG_NoCarrierMsg       ; is this a HFP-AG No Carrier
+; CALL      MatchMessageToString
+; JUMP      Z, Handle_HFPAG_NoCarrierMsg  ; jump to process HFP-AG Dial Last
+
+
+
+; LOAD      sA, 'e'			; debug
+; CALL      SendToUserPico
+; LOAD      sA, 'r'
+; CALL      SendToUserPico
+
+
+
+
+
+; ;; Clean incoming BT buffer and prepare for the next BT message
+_ProcMessClean: 
+
+                    CALL      Send_CR_LF_ToUser   ; debug
+
+
+                    LOAD      s6, BluegigaInStart ; Bluegiga buffer
+                    LOAD      s7, 00               ; 0 value
+
+_ProcMessCleanLoop: 
+                    STORE     s7, (s6)              ; store 0 in Bluegiga buffer location
+                    ADD       s6, 01               ; next buffer location
+                    COMPARE   s6, BluegigaInEnd   ; end of buffer ?
+                    JUMP      NZ, _ProcMessCleanLoop; loop if not
+
+                    STORE     s7, BluegigaCharCount; and store in the characters received count
+
+                    LOAD      sF, BluegigaInStart ; reset current buffer position
+                    STORE     sF, BluegigaCurrentPos; reset current buffer position
+
+                    RETURN       
+
+
+
+SendInquiryMessage: 
+					
+                    FETCH     sF, InquiryPeriodDelay; delay counter
+                    ADD       sF, 00               ; test if active
+                    RETURN    Z                   ; return if INQUIRY messages inactive
+
+                    SUB       sF, 01               ; count it
+                    STORE     sF, InquiryPeriodDelay; and remember it
+
+                    COMPARE   sF, 00               ; every 20 seconds approx
+
+                    RETURN    NZ                  ; not time to send yet
+
+                    LOAD      s6, InquiryMsg      ; inquiry msg number
+                    CALL      SendMessageToBluegiga; send the message
+					
+                    ;FETCH     sF, InquiryPollingTimeout
+					; LOAD      sA, sF    ; debug
+					; CALL      ByteToCharsToUser
+					;                     LOAD      sA, '.'
+					;                    CALL      SendToUserPico
+
+                    FETCH     sF, InquiryPollingTimeout
+                    COMPARE   sF, 00               ; test if active
+                    RETURN Z                   ; return if INQUIRY messages inactive (timed out)
+                    SUB       sF, 01               ; count it
+                    STORE     sF, InquiryPollingTimeout; and remember it
+
+					;  use this to restart INQUIRY
+                    LOAD      sF, 10'd	   		  ; 10 second gap = 6 per minute
+                    STORE     sF, InquiryPeriodDelay; reset clocking
+
+									
+                    RETURN       
+
+
+HandleInquiryReply: 
+
+; ;; INQUIRY 00:25:89:65:2e:c2 200404
+; ;; INQUIRY dc:2c:26:ef:4c:7b 002540
+; ;; 00112233445566778899aabbccddeeff
+; ;; 012345678901234567890123456789012345
+; ;;           1         2         3
+; ;;
+; ;; sC points at next character in message
+
+                    FETCH     sF, BluegigaCharCount
+                    COMPARE   sF, 09               ; is message length of INQUIRY n - n = no of replies
+                    JUMP      Z, _ProcMessClean   ; do not handle, simply clean up for next message
+
+
+                    LOAD      sF, sC              ; copy start of MAC address
+                    ADD       sF, 02              ; look for the first ':'
+                    FETCH     sA, (sF)            ; get character from input buffer
+                    COMPARE   sA, ":"             ; is it the expected ':'
+                    JUMP      NZ, _ProcMessClean  ; skip this message if not
+
+; LOAD      sA, 'z'             ; debug - say we have seen a MAC address
+; CALL      SendToUserPico
+
+                    CALL      StoreMACByLink      ; copy the MAC in sC address from Bluegiga buffer to the MAC store
+
+
+                    LOAD      s1, 00               ; default current type is 0
+                    STORE     s1, CurrentType
+
+
+                    LOAD      sC, BluegigaInStart ; Bluegiga buffer
+                    ADD       sC, 26'd              ; point at type
+                    STORE     sC, BufferPointer
+
+                    CALL      GetConnectionType   ; determine type from message
+
+; _HandleInquiry_10: 
+
+; ;;  Copy from Current Type to that for the selected channel
+
+                    COMPARE   s0, 01
+                    JUMP      NZ, _HandleInquiry_3a
+                    STORE     s1, ConnectType1
+                    JUMP      _HandleInquiry_3d
+
+_HandleInquiry_3a: 
+                    COMPARE   s0, 02
+                    JUMP      NZ, _HandleInquiry_3b
+                    STORE     s1, ConnectType2
+                    JUMP      _HandleInquiry_3d
+
+_HandleInquiry_3b: 
+                    COMPARE   s0, 03
+                    JUMP      NZ, _HandleInquiry_3d
+                    STORE     s1, ConnectType3
+                    JUMP      _HandleInquiry_3d
+
+_HandleInquiry_3d: 
+
+; ;; Set the first PIN code and send the pair message
+; ;; If this PIN code fails, then the PAIR will be tried again with the 
+; ;; additional 2 PIN codes
+; ;;
+
+                    LOAD      s6, 00               ; first PIN code
+                    STORE     s6, PinCodeSelected ; remember it
+
+                    LOAD      s6, SetPinCodeMsg   ; send PIN code message
+                    CALL      SendMessageToBluegiga; to Bluegiga
+
+                    CALL      delay_10ms
+
+                    LOAD      s6, PairReqMsg      ; 
+                    CALL      SendMessageToBluegiga
+
+                    CALL      delay_10ms
+
+; FETCH     s1, SelectedPointer
+; LOAD      sF, 15              ; 15 seconds time out
+; ADD       s1, 2               ; location of timer
+; STORE     sF, s1              ; cancel timer operation
+
+                    LOAD      sF, 20'd              ; delay INQUIRY messages for a period
+                    STORE     sF, InquiryPeriodDelay; reset clocking
+
+                    ;CALL      DebugReport               ; debug
+
+                    JUMP      _ProcMessClean
+
+
+; ;; 					
+GetConnectionType: 
+                    ;CALL      Send_CR_LF_ToUser         ; debug
+                    ;CALL      Send_CR_LF_ToUser         ; debug
+; ;;
+; ;; Determine connection type
+; ;;
+
+                    FETCH     sC, BufferPointer
+                    LOAD      s6, BT_HFP_AG       ; is this an Headset ID string
+                    CALL      MatchMessageToString
+                    JUMP      NZ, _GetConnectionType_2; jump to process INQUIRY reply
+
+; ;; remember this link is HFP
+
+                    LOAD      s1, HFP_AG_Type
+                    STORE     s1, CurrentType
+
+
+                    LOAD      sA, "h"
+                    CALL      SendToUserPico
+                    LOAD      sA, "f"
+                    CALL      SendToUserPico
+                    ;;LOAD      sA, "p"
+                    ;;CALL      SendToUserPico
+                    CALL      Send_CR_LF_ToUser
+                    RETURN       
+
+
+; ;;
+_GetConnectionType_2: 
+                    FETCH     sC, BufferPointer
+                    LOAD      s6, BT_HSP_AG       ; is this an Headset ID string
+                    CALL      MatchMessageToString
+                    JUMP      NZ, _GetConnectionType_3; jump to process INQUIRY reply
+
+; ;; remember this link is HSP
+
+                    LOAD      s1, HSP_AG_Type
+                    STORE     s1, CurrentType
+
+                    LOAD      sA, "h"
+                    CALL      SendToUserPico
+                    LOAD      sA, "s"
+                    CALL      SendToUserPico
+                    ;;LOAD      sA, "p"
+                    ;;CALL      SendToUserPico
+                    CALL      Send_CR_LF_ToUser
+                    RETURN       
+
+_GetConnectionType_3: 
+; ;; Look for computer connections, keyboards ...
+
+
+                    FETCH     sC, BufferPointer
+                    LOAD      s6, BT_COMPUTER     ; is this an computer connection
+                    CALL      MatchMessageToString
+                    RETURN    NZ                  ; jump to process INQUIRY reply
+
+; ;; remember this link is computer connection
+
+                    LOAD      s1, ComputerType
+                    STORE     s1, CurrentType
+
+                    ;;LOAD      sA, "c"
+                    ;;CALL      SendToUserPico
+; LOAD      sA, 'o'
+; CALL      SendToUserPico
+; LOAD      sA, 'm'
+; CALL      SendToUserPico
+
+
+                    RETURN       
+
+
+HandlePairReply: 
+
+; ;; PAIR 00:23:7f:b7:36:68 OK					
+; ;; 00112233445566778899aabbccddeeff
+; ;; 012345678901234567890123456789012345
+; ;;           1         2         3
+; ;;
+; ;; sC points at next character in message
+
+                    ;LOAD      sA, "P"             ; debug
+                    ;CALL      SendToUserPico
+
+                    CALL      GetChannelFromMAC   ; get the channel and type according to MAC
+
+                    FETCH     sF, BluegigaCharCount
+                    COMPARE   sF, 25'd            ; is message length of PAIR that for OK message
+                    JUMP      NZ, HandlePairReplyFail; do not handle if message length wrong, simply clean up for next message
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    ADD       sC, 5'd               ; point to MAC
+
+
+; LOAD      sC, BluegigaInStart ; Bluegiga buffer
+                    ADD       sC, 18'd
+
+                    FETCH     sF, (sC)            ; fetch next character
+                    COMPARE   sF, "O"             ; is it 'O'
+                    JUMP      NZ, HandlePairReplyFail; if not, then not paired
+
+                    ADD       sC, 1'd
+                    FETCH     sF, (sC)            ; fetch next character
+                    COMPARE   sF, "K"             ; is it 'K'
+                    JUMP      NZ, HandlePairReplyFail; if not, then not paired
+
+
+SendCallMessage: 
+
+; LOAD      sA, 'Q'          ; debug
+; CALL      SendToUserPico
+                    ;CALL      Send_CR_LF_ToUser    ; debug
+                    ;CALL      Send_CR_LF_ToUser    ; debug
+
+; ;; call the Bluetooth device here
+
+
+                    FETCH     sF, CurrentType
+
+                    COMPARE   sF, HFP_AG_Type     ; HFP?
+                    JUMP      NZ, HandlePairReplyA; jump if not
+
+                    LOAD      s6, CallHFP_AGMsg   ; 
+                    CALL      SendMessageToBluegiga
+
+; LOAD      sA, 'J'   ; debug
+; CALL      SendToUserPico
+
+                    JUMP      _ProcMessClean
+
+HandlePairReplyA: 
+
+                    COMPARE   sF, HSP_AG_Type     ; HSP?
+                    JUMP      NZ, HandlePairReplyB; jump if not
+
+                    LOAD      s6, CallHSP_AGMsg   ; 
+                    CALL      SendMessageToBluegiga
+
+
+; LOAD      sA, 'K'   ; debug
+; CALL      SendToUserPico
+
+                    JUMP      _ProcMessClean
+
+HandlePairReplyB: 
+
+                    COMPARE   sF, ComputerType    ; computer?
+                    JUMP      NZ, HandlePairReplyC; jump if not
+
+                    LOAD      s6, CallA2DPMsg     ; 
+                    CALL      SendMessageToBluegiga
+
+                    LOAD      sA, "L"             ; debug
+                    CALL      SendToUserPico
+
+
+HandlePairReplyC: 
+; LOAD      sA, 'M'   ; debug
+; CALL      SendToUserPico
+
+                    JUMP      _ProcMessClean
+
+HandlePairReplyFail: 
+
+
+; LOAD      sA, 'Z'
+; CALL      SendToUserPico
+
+                    FETCH     s7, PinCodeSelected ; compute next PIN code
+                    ADD       s7, 01
+                    STORE     s7, PinCodeSelected ; remember next PIN code
+
+                    COMPARE   s7, 03               ; all 3 pin codes tried?
+                    JUMP      Z, HandlePairReplyAllFail; abandon process
+
+                    LOAD      s6, SetPinCodeMsg   ; else send next PIN code message	
+                    CALL      SendMessageToBluegiga
+
+                    CALL      delay_10ms
+
+                    LOAD      s6, PairReqMsg      ; then send PAIR message for this PIN code
+                    CALL      SendMessageToBluegiga
+
+
+
+                    JUMP      _ProcMessClean
+
+HandlePairReplyAllFail: 
+
+; ;; could tell user in some way = LCD display
+                    LOAD      sF, 10'd              ; restart INQUIRY messages
+                    STORE     sF, InquiryPeriodDelay; reset clocking
+
+                    JUMP      _ProcMessClean
+
+
+HandleRingMsgReply: 
+
+; ;; RING 0 fc:58:fa:e1:38:4a 4 HFP-AG
+; ;; 00112233445566778899aabbccddeeff
+; ;; 012345678901234567890123456789012345
+; ;;           1         2         3
+; ;;
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    ADD       sC, 7'd             ; point to the MAC address
+
+
+                    CALL      StoreMACByLink      ; copy the MAC in sC address from Bluegiga buffer to the MAC store
+
+                    LOAD      sC, BluegigaInStart ; Bluegiga buffer
+                    ADD       sC, 27'd            ; point at type
+                    STORE     sC, BufferPointer
+                    CALL      GetConnectionString
+
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    ADD       sC, 5'd               ; point to control channel
+
+                    FETCH     sF, (sC)            ; recover Control channel
+                    STORE     sF, CurrentChannel
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    ADD       sC, 25'd            ; point to the audio channel
+                    FETCH     sE, (sC)            ; recover audio channel
+
+                    STORE     sE, CurrentAudio
+
+                    COMPARE   s0, 01              ; first slot?
+                    JUMP      NZ, HandleRingMsgReply_B
+
+                    STORE     s1, ConnectType1
+                    STORE     sF, ControlChannel1
+                    STORE     sE, AudioChannel1
+
+                    JUMP      HandleRingMsgReply_D
+
+HandleRingMsgReply_B: 
+                    COMPARE   s0, 02              ; second slot?
+                    JUMP      NZ, HandleRingMsgReply_C
+
+                    STORE     s1, ConnectType2
+                    STORE     sF, ControlChannel2
+                    STORE     sE, AudioChannel2
+
+                    JUMP      HandleRingMsgReply_D
+
+HandleRingMsgReply_C: 
+                    COMPARE   s0, 03              ; third slot?
+                    JUMP      NZ, _ProcMessClean
+
+                    STORE     s1, ConnectType3
+                    STORE     sF, ControlChannel3
+                    STORE     sE, AudioChannel3
+
+                    JUMP      HandleRingMsgReply_D
+
+HandleRingMsgReply_D: 
+                    CALL      DebugReport
+
+                    ;LOAD      s6, OKMsg           ;
+                    ;CALL      SendMessageToBluegiga
+                    ;CALL      delay_10ms
+
+                    ;LOAD      s6, SCO_Open        ;
+                    ;CALL      SendMessageToBluegiga
+                    ;CALL      delay_10ms
+
+
+					LOAD      s6, KillMsg        ;
+                    CALL      SendMessageToBluegiga
+                    CALL      delay_1s
+                    
+                    LOAD      sF, 01
+                    STORE     sF, InquiryPeriodDelay	; reset INQUIRY message clocking
+
+                    LOAD      sF, 06					; restart inquiry - 6 per minute so this takes 1 minutes
+					STORE     sF, InquiryPollingTimeout		; maximum attempts to connect = about 5 minutes
+
+                    ;LOAD      s6, PairReqMsg        ;
+                    ;CALL      SendMessageToBluegiga
+                    ;CALL      delay_10ms
+                    
+                    
+; JUMP       SendCallMessage
+
+
+                    JUMP      _ProcMessClean
+
+
+
+
+; ;; 					
+GetConnectionString: 
+
+; ;;
+; ;; Determine connection type
+; ;;
+
+; FETCH  sA, sC
+; CALL      SendToUserPico
+; ADD sC, 1
+; FETCH  sA, sC
+; CALL      SendToUserPico
+
+                    FETCH     sC, BufferPointer
+                    LOAD      s6, BT_HFP_AG_STRING; is this an Headset ID string
+                    CALL      MatchMessageToString
+                    JUMP      NZ, _GetConnectionString_2; jump to process INQUIRY reply
+
+; ;; remember this link is HFP
+
+                    LOAD      s1, HFP_AG_Type
+                    STORE     s1, CurrentType
+
+
+                    LOAD      sA, "h"             ; debug
+                    CALL      SendToUserPico
+                    LOAD      sA, "f"
+                    CALL      SendToUserPico
+                    LOAD      sA, "p"
+                    CALL      SendToUserPico
+
+                    RETURN      
+
+
+; ;;
+_GetConnectionString_2: 
+                    FETCH     sC, BufferPointer
+                    LOAD      s6, BT_HSP_AG_STRING; is this an Headset ID string
+                    CALL      MatchMessageToString
+                    JUMP      NZ, _GetConnectionString_3; jump to process INQUIRY reply
+
+; ;; remember this link is HSP
+
+                    LOAD      s1, HSP_AG_Type
+                    STORE     s1, CurrentType
+
+                    LOAD      sA, "h"             ; debug
+                    CALL      SendToUserPico
+                    LOAD      sA, "s"
+                    CALL      SendToUserPico
+                    LOAD      sA, "p"
+                    CALL      SendToUserPico
+
+                    RETURN      
+
+_GetConnectionString_3: 
+; ;; Look for computer connections, keyboards ...
+
+
+                    FETCH     sC, BufferPointer
+                    LOAD      s6, BT_COMPUTER_STRING; is this an computer connection
+                    CALL      MatchMessageToString
+                    RETURN    NZ                  ; jump to process INQUIRY reply
+
+; ;; remember this link is computer connection
+
+                    LOAD      s1, ComputerType
+                    STORE     s1, CurrentType
+
+                    LOAD      sA, "c"             ; debug
+                    CALL      SendToUserPico
+; LOAD      sA, 'o'
+; CALL      SendToUserPico
+                    LOAD      sA, "m"
+                    CALL      SendToUserPico
+
+
+                    RETURN       
+
+
+HandleCallMsgReply: 
+; ;; CALL 0
+; ;; CALL 00:23:7f:b7:36:68 1108 HSP-AG
+; ;; 00112233445566778899aabbccddeeff
+; ;; 012345678901234567890123456789012345
+; ;;           1         2         3
+; ;; 
+
+; ;; sC points at next character in message
+
+                    FETCH     sF, BluegigaCharCount
+                    COMPARE   sF, 06               ; is message length of CALL that for CALL x message
+                    JUMP      NZ, HandleCallMsgReplyLong; jump if long message
+
+                    FETCH     s7, (sC)              ; fetch the control channel from the message
+
+                    FETCH     s0, IndexSelected   ; get current channel
+
+                    COMPARE   s0, 01               ; first channel?
+                    JUMP      NZ, HandleCallMsgReply1
+
+                    FETCH     sF, ControlChannel1 ; make sure not used
+                    ADD       sF, 00
+                    JUMP      NZ, HandleCallMsgReply1
+
+                    STORE     s7, ControlChannel1 ; save the control channel allocated
+
+                    LOAD      sA, "X"             ; debug
+                    CALL      SendToUserPico
+
+
+                    JUMP      _ProcMessClean
+
+HandleCallMsgReply1: 
+                    COMPARE   s0, 02              ; second channel?
+                    JUMP      NZ, HandleCallMsgReply2
+
+                    FETCH     sF, ControlChannel2 ; make sure not used
+                    ADD       sF, 00
+                    JUMP      NZ, HandleCallMsgReply2
+
+                    STORE     s7, ControlChannel2 ; save the control channel allocated
+
+                    LOAD      sA, "Y"             ; debug
+                    CALL      SendToUserPico
+                    CALL      DebugReport
+
+                    JUMP      _ProcMessClean
+
+HandleCallMsgReply2: 
+                    COMPARE   s0, 03               ; third channel?
+                    JUMP      NZ, _ProcMessClean
+
+                    FETCH     sF, ControlChannel3 ; make sure not used
+                    ADD       sF, 00
+                    JUMP      NZ, _ProcMessClean
+
+                    STORE     s7, ControlChannel3 ; save the control channel allocated
+
+                    LOAD      sA, "Z"             ; debug
+                    CALL      SendToUserPico
+
+                    CALL      DebugReport
+
+                    JUMP      _ProcMessClean
+
+
+HandleCallMsgReplyLong: 
+
+; ;; CALL 00:23:7f:b7:36:68 1108 HSP-AG
+; ;; 00112233445566778899aabbccddeeff
+; ;; 012345678901234567890123456789012345
+; ;;           1         2         3
+; ;; 
+
+                    LOAD      sA, "W"             ; debug
+                    CALL      SendToUserPico
+
+                    JUMP      _ProcMessClean
+
+; ;;============================================================================
+; ;; Handle CONNECT reply
+
+; ;;  Either:
+
+; ;; CONNECT 0 HFP-AG 3    or
+; ;; CONNECT 0 HSP 6       or
+; ;; CONNECT 1 SCO  
+; ;; 001122334455667788
+; ;; 012345678901234567890
+; ;;           1         2
+
+; ;; need to separate out the 'SCO' message and bypass overwriting database
+HandleConnectHSPMsgReply: 
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    ADD       sC, 8'd
+                    LOAD      sE, BluegigaInStart ; beginning of message
+                    ADD       sE, 14'd
+
+                    FETCH     s7, (sC)
+                    FETCH     s8, (sE)
+
+                    JUMP      ConnectCommon
+
+HandleConnectMsgReply: 
+
+                    FETCH     s7, (sC)              ; get the control channel
+; ADD       sC, 8 			; to be improved
+                    ADD       sC, 6'd             ; to be improved
+                    FETCH     s8, (sC)              ; get the audio RFCOMM channel
+
+ConnectCommon: 
+                    FETCH     s9, ControlChannel1 ; get the first channel
+                    COMPARE   s7, s9              ; is it the first channel?
+                    JUMP      NZ, HandleConnectMsgReply2; jump if not
+
+                    STORE     s9, CurrentChannel
+
+                    LOAD      s9, 01              ; save the channel number
+                    STORE     s9, IndexSelected   ; remember the channel
+
+                    STORE     s8, AudioChannel1   ; save the audio channel
+                    STORE     s8, CurrentAudio    ; and in current
+
+
+; LOAD      sA, '+'
+; CALL      SendToUserPico	
+                    LOAD      sA, s8
+                    CALL      SendToUserPico
+
+
+                    JUMP      HandleConnectMsgReply0
+
+HandleConnectMsgReply2: 
+
+                    FETCH     s9, ControlChannel2 ; get the second channel
+                    COMPARE   s7, s9              ; is it the second channel?
+                    JUMP      NZ, HandleConnectMsgReply3; jump if not
+
+                    STORE     s9, CurrentChannel
+
+                    LOAD      s9, 02               ; save the channel number
+                    STORE     s9, IndexSelected   ; remember the channel
+
+                    STORE     s8, AudioChannel2   ; save the audio channel
+                    STORE     s8, CurrentAudio    ; and in current
+
+; LOAD      sA, 'y'
+; CALL      SendToUserPico	
+
+                    JUMP      HandleConnectMsgReply0
+
+HandleConnectMsgReply3: 
+
+                    FETCH     s9, ControlChannel3 ; get the second channel
+                    COMPARE   s7, s9              ; is it the seecond channel?
+                    JUMP      NZ, _ProcMessClean  ; abort if not
+
+                    STORE     s9, CurrentChannel
+
+                    LOAD      s9, 03               ; save the channel number
+                    STORE     s9, IndexSelected   ; remember the channel
+
+                    STORE     s8, AudioChannel3   ; save the audio channel
+                    STORE     s8, CurrentAudio    ; and in current
+
+; LOAD      sA, 'z'
+; CALL      SendToUserPico	
+
+                    JUMP      HandleConnectMsgReply0
+
+
+HandleConnectMsgReply0: 
+
+
+                    LOAD      s6, SCO_Open        ; 
+                    CALL      SendMessageToBluegiga
+
+                    CALL      DebugReport
+
+                    JUMP      _ProcMessClean
+
+
+Handle_HFP_AG_Ready_MsgReply: 
+
+; ;; HFP-AG 0 READY
+; ;; 012345678901234567890
+; ;;           1         2
+
+                    LOAD      s6, StatusService1Msg; 
+                    CALL      SendMessageToBluegiga
+
+                    JUMP      _ProcMessClean
+
+
+Handle_HSP_Button_Msg: 
+
+; ;; HSP-AG 0 BUTTON
+; ;; 012345678901234567890
+; ;;           1         2
+                    LOAD      sA, "9"
+                    CALL      SendToUserPico
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    ADD       sC, 7'd
+                    FETCH     sE, (sC)
+                    CALL      GetChannelFromControl
+
+
+                    FETCH     s6, Transmitting    ; can only transmit if no other is transmitting
+                    ADD       s6, 00               ; 
+                    JUMP      Z, Handle_HSP_Button_Msg_Continue; if not transmitting then we can try now
+
+                    LOAD      sA, "8"
+                    CALL      SendToUserPico
+
+; ; ; else for HSP stop transmitting now.
+
+                    LOAD      sA, TRANSMIT_OFF    ; tell User Pico we are not transmitting
+                    CALL      SendToUserPico
+
+                    LOAD      sA, 00               ; remember we are not transmitting
+                    STORE     sA, Transmitting
+
+; LOAD      s6, SCO_Open     ; re-open SCO for incoming messages
+; CALL      SendMessageToBluegiga
+
+
+                    JUMP      _ProcMessClean
+
+
+Handle_HFP_AG_DialLast_Msg: 
+
+
+; ;; HFP-AG 0 DIAL LAST
+; ;; 012345678901234567890
+; ;;           1         2
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    ADD       sC, 7'd
+                    FETCH     sE, (sC)				; get
+                    CALL      GetChannelFromControl
+
+Handle_HSP_Button_Msg_Continue: 
+                    ;LOAD      sA, "7"             ; debug ?
+                    ;CALL      SendToUserPico
+
+                    FETCH     s6, Receiving       ; can only transmit if not receiving
+                    ADD       s6, 00               ; set code
+; JUMP      NZ, _ProcMessClean ; skip out if receiving.
+
+                    ;LOAD      sA, '#'             ; debug
+                    ;CALL      SendToUserPico
+
+                    FETCH     s6, Transmitting    ; can only transmit if no other is transmitting
+                    ADD       s6, 00               ; set code
+                    JUMP      NZ, _ProcMessClean  ; skip out if already transmitting.
+
+                    ;LOAD      sA, '+'; debug ?
+                    ;CALL      SendToUserPico
+
+
+                    LOAD      s6, OKMsg           ; 
+                    CALL      SendMessageToBluegiga
+
+
+; LOAD      s6, SCO_Close      ;
+; CALL      SendMessageToBluegiga
+
+
+                    LOAD      sA, TRANSMIT_ON     ; tell User Pico we are transmitting
+                    CALL      SendToUserPico
+
+                    LOAD      sA, 01               ; remember we are transmitting
+                    STORE     sA, Transmitting
+
+                    JUMP      _ProcMessClean
+
+
+
+Handle_HFPAG_NoCarrierMsg: 
+
+
+                    LOAD      sA, TRANSMIT_OFF    ; tell User Pico we are not transmitting
+                    CALL      SendToUserPico
+
+                    LOAD      sA, 00               ; remember we are not transmitting
+                    STORE     sA, Transmitting
+
+; LOAD      s6, OKMsg      ;
+; CALL      SendMessageToBluegiga
+
+; LOAD      s6, SCO_Open     ; re-open SCO for incoming messages
+; CALL      SendMessageToBluegiga
+
+                    ;LOAD      sA, "z"             ; debug?
+                    ;CALL      SendToUserPico
+
+                    JUMP      _ProcMessClean
+
+
+Handle_NoCarrierMsg: 
+
+; ;; NO CARRIER 0 ERROR 0
+; ;; 012345678901234567890
+; ;;           1         2
+
+                    LOAD      sC, BluegigaInStart ; beginning of message
+                    ADD       sC, 11'd
+                    FETCH     sE, (sC)
+                    CALL      GetChannelFromControl
+
+                    LOAD      sF, 00
+
+                    COMPARE   s0, 01               ; first Bluetooth gone?
+                    JUMP      NZ, Handle_NoCarrierMsg_2; jump if not
+
+; clean out first connection
+
+                    ;LOAD      sA, '&'             ; debug
+                    ;CALL      SendToUserPico
+
+                    STORE     sF, ConnectType1
+                    STORE     sF, AudioChannel1
+                    STORE     sF, ConnectType1
+
+                    LOAD      sE, HeadsetMACAddress1
+
+                    JUMP      Handle_NoCarrierMsg_10
+
+
+Handle_NoCarrierMsg_2: 
+
+                    COMPARE   s0, 02               ; second Bluetooth gone?
+                    JUMP      NZ, Handle_NoCarrierMsg_3; jump if not
+
+; clean out second connection
+
+                    ;LOAD      sA, '$'             ; debug
+                    ;CALL      SendToUserPico
+
+                    STORE     sF, ConnectType2
+                    STORE     sF, AudioChannel2
+                    STORE     sF, ConnectType2
+
+                    LOAD      sE, HeadsetMACAddress2
+
+                    JUMP      Handle_NoCarrierMsg_10
+
+Handle_NoCarrierMsg_3: 
+                    COMPARE   s0, 03               ; third Bluetooth gone?
+                    JUMP      NZ, Handle_NoCarrierMsg_4; jump if not
+
+; clean out third connection
+
+                    ;LOAD      sA, '%'             ; debug
+                    ;CALL      SendToUserPico
+
+
+                    STORE     sF, ConnectType3
+                    STORE     sF, AudioChannel3
+                    STORE     sF, ConnectType3
+
+                    LOAD      sE, HeadsetMACAddress3
+
+                    JUMP      Handle_NoCarrierMsg_10
+
+Handle_NoCarrierMsg_4: 
+                    JUMP      _ProcMessClean
+
+
+Handle_NoCarrierMsg_10: 
+
+                    LOAD      sC, 17'd         ; clear the stored MAC address
+
+Handle_NoCarrierMsg_11: 
+                    STORE     sF, (sE)
+                    SUB       sC, 01
+                    JUMP      NZ, Handle_NoCarrierMsg_11
+
+
+					; ensure transmit is off
+
+                    LOAD      sA, TRANSMIT_OFF    ; tell User Pico we are not transmitting
+                    CALL      SendToUserPico
+
+                    LOAD      sA, 00               ; remember we are not transmitting
+                    STORE     sA, Transmitting
+                    
+                    JUMP      _ProcMessClean
+
+
+; ;;============================================================================
+; ;;============================================================================
+; ;;============================================================================
+; ;; Send character to User pico
+; ;;
+; ;; Sends character in sA to the User Pico
+; ;;
+; ;; Uses sF
+; ;;
+
+SendToUserPicoW: 
+
+SendToUserPico: 
+                    INPUT     sF, BT_STATUS_REG
+
+                    AND       sF, USER_TX_FULL    ; look for FIFO to user filling up
+                    COMPARE   sF, USER_TX_FULL    ; if so wait till user Pico catches up
+
+                    JUMP      Z, SendToUserPicoW  ; if state not zero then wait
+
+                    OUTPUT    sA, USER_TX_REG     ; send byte back to user Pico
+
+                    RETURN       
+
+
+; ;;============================================================================
+; ;;============================================================================
+; ;;============================================================================
+; ;; Read message from Bluegiga
+; ;;
+; ;;    Reads a message from the Bluegiga and stores in the incoming buffer
+; ;;
+; ;;    Uses sA, sF
+; ;;
+; ;;    Returns Z if message ready to process; returns B+NZ otherwise
+
+ReadMessageFromBluegiga: 
+
+                    CALL      ReadCharFromBluegiga; read a character
+                    RETURN    NZ                  ; no character received this time
+
+                    COMPARE   sA, 10'd             ; is this the end of message
+                    JUMP      Z, ReadMessageFromBluegiga; ignore line feeds
+                    COMPARE   sA, 13'd             ; is this the end of message
+                    RETURN    Z
+
+                    FETCH     sF, BluegigaCurrentPos; current buffer position
+
+                    COMPARE   sF, BluegigaInEnd   ; check if buffer full
+                    JUMP      Z, _ReadBG_1        ; do not move on if full
+
+                    STORE     sA, (sF)            ; store the received character
+
+; LOAD      sA, sF    ; debug
+; CALL      ByteToCharsToUser
+
+                    ADD       sF, 01               ; next buffer position
+                    STORE     sF, BluegigaCurrentPos; store position back
+
+                    FETCH     sF, BluegigaCharCount; character received count
+                    ADD       sF, 01               ; increment
+                    STORE     sF, BluegigaCharCount; character received count
+
+                    JUMP      ReadMessageFromBluegiga; loop if not end of message
+
+_ReadBG_1: 
+
+; LOAD      sA, $BB
+; CALL      ByteToCharsToUser
+
+                    FETCH     sF, BluegigaCharCount; character received count
+                    ADD       sF, 01               ; increment
+                    STORE     sF, BluegigaCharCount; character received count
+
+                    LOAD      sF, 00
+                    ADD       sF, 00
+
+                    JUMP      ReadMessageFromBluegiga; loop if not end of message
+
+; RET             ;
+
+; ;;============================================================================
+; ;;============================================================================
+; ;;============================================================================
+; ;; Read character from Bluegiga
+; ;;
+; ;;    Reads character in sA to Bluegiga
+; ;;
+; ;;    Uses sF
+ReadCharFromBluegiga: 
+
+                    INPUT     sF, BT_STATUS_REG   ; Is there a byte available
+                    AND       sF, BT_RX_DATA      ; check if there is anything there
+                    COMPARE   sF, BT_RX_DATA
+                    RETURN    NZ                  ; return if no character from Blue Giga
+
+                    INPUT     sA, BT_RX_REG       ; read the character
+
+; ;; need to check if in diag mode  TBD
+
+                    CALL      SendToUserPico
+
+                    LOAD      sF, 00               ; make sure condition code is set
+                    ADD       sF, 00
+
+                    RETURN       
+
+
+
+; ;;============================================================================
+; ;;============================================================================
+; ;;============================================================================
+; ;; Send character to Bluegiga
+; ;;
+; ;;    Transmits character in sA to Bluegiga
+; ;;
+; ;;    Uses sF
+
+SendCharToBluegiga: 
+                    INPUT     sF, BT_STATUS_REG   ; get status word
+                    AND       sF, BT_TX_FULL      ; mask to full flag
+                    COMPARE   sF, BT_TX_FULL      ; check it
+                    JUMP      Z, SendCharToBluegiga; if set wait till goes to 0
+
+                    OUTPUT    sA, BT_TX_REG       ; we can send the character now
+
+
+; ;;
+; ;; if this code is enabled then messages from User to BT *must* be short else
+; ;; we get a FIFO full and program is blocked.
+; ;;
+; COMP      s1, 'A'
+; JUMP      C, _SendCharToBGa
+; OR        s1, $60
+_SendCharToBGa: 
+                    CALL      SendToUserPico      ; send character in sA to User Pico (debugging)
+
+                    RETURN       
+
+; ;;
+; ;;	SendMessageToBluegiga:
+; ;;
+; ;;	Send message to Bluegiga
+; ;;
+; ;;	s6 is the string number of the message in the Bluetooth RAM area
+; ;;
+
+SendMessageToBluegiga: 
+
+                    CALL      ComputeRAMAddress   ; get RAM address into s6, s7
+
+_SendToBGLoop: 
+                    LOAD      sE, s6              ; copy the message address
+                    LOAD      sF, s7
+                    CALL      ReadFromRAMBlock    ; reads from RAM address IN: sE(low), sF; RETURNS chars in sA (low) and sB (high)
+
+                    COMPARE   sA, 00               ; check if end of message
+                    JUMP      Z, _SendToBGFinish  ; NULL indicates end of message
+
+                    COMPARE   sA, 16'd            ; if LT 16 then special handling
+                    CALL      C, _SendSpecialBG   ; decode and send to Bluegiga
+
+                    ADD       sA, 00               ; check something to send
+
+                    CALL      NZ, SendCharToBluegiga; send the character ( or space from decoded )
+
+
+                    LOAD      sA, sB              ; copy second character for transmission
+                    COMPARE   sA, 00               ; check if end of message
+                    JUMP      Z, _SendToBGFinish  ; NULL indicates end of message
+
+                    COMPARE   sA, 16'd              ; if LT 16 then special handling
+                    CALL      C, _SendSpecialBG   ; decode and send to Bluegiga
+                    ADD       sA, 00               ; check something to send
+
+                    CALL      NZ, SendCharToBluegiga; send the character ( or space from decoded )
+
+                    ADD       s6, 01               ; next character pair in message
+                    ADDCY     s7, 00               ; 16 bit address
+
+                    JUMP      _SendToBGLoop       ; loop round
+
+
+_SendToBGFinish: 
+                    LOAD      sA, 10'd             ; carriage return
+                    CALL      SendCharToBluegiga  ; send it
+                    LOAD      sA, 13'd             ; carriage return
+                    CALL      SendCharToBluegiga  ; send it
+
+                    CALL      delay_10ms
+
+                    RETURN                        ; to caller
+
+_SendSpecialBG: 
+
+_SendSpec_1: 
+                    COMPARE   sA, 01               ; is it send the MAC address?
+                    JUMP      NZ, _SendSpec_2     ; skip if not
+
+                    FETCH     sE, IndexSelected   ; get the selected message channel					
+                    CALL      GetMACFromLink      ; returns address of MAC address in sE
+
+
+_SendSpec_1a: 
+                    FETCH     sA, (sE)              ; reads from RAM address sE to sA 
+
+                    COMPARE   sA, 00               ; is it the last character
+                    JUMP      Z, _SendSpecialBGEnd; finish if so
+                    CALL      SendCharToBluegiga  ; send character in sA
+
+                    CALL      delay_1us
+
+; LOAD  sA, '~'
+; CALL   SendCharToBluegiga
+
+                    ADD       sE, 01               ; next character
+
+                    JUMP      _SendSpec_1a
+
+_SendSpec_2: 
+                    COMPARE   sA, 02               ; is it send the Audio Channel number
+                    JUMP      NZ, _SendSpec_3     ; skip if not
+
+                    FETCH     sA, CurrentAudio    ; get the selected audio message channel					
+
+                    CALL      SendCharToBluegiga  ; send character in sA
+
+                    JUMP      _SendSpecialBGEnd
+
+_SendSpec_3: 
+                    COMPARE   sA, 03               ; is it send tbd?
+                    JUMP      NZ, _SendSpec_4     ; skip if not
+
+                    FETCH     sA, CurrentChannel  ; get the selected control message channel					
+
+                    CALL      SendCharToBluegiga  ; send character in sA
+
+                    JUMP      _SendSpecialBGEnd
+
+_SendSpec_4: 
+                    COMPARE   sA, 04               ; is it send tbd?
+                    JUMP      NZ, _SendSpec_9     ; skip if not
+
+                    JUMP      _SendSpecialBGEnd
+
+_SendSpec_9: 
+                    COMPARE   sA, 09               ; is it send Pin code?
+                    JUMP      NZ, _SendSpecialBGEnd; skip if not
+
+                    LOAD      sE, Pin1
+
+                    FETCH     sD, PinCodeSelected
+
+                    COMPARE   sD, 00               ; first PIN
+                    JUMP      NZ, _SendSpec_9_a
+; LOAD   sE, Pin1   ; done above
+                    JUMP      NZ, _SendSpec_9_1
+
+_SendSpec_9_a: 
+                    COMPARE   sD, 01               ; second PIN
+                    JUMP      NZ, _SendSpec_9_b
+                    LOAD      sE, Pin2
+                    JUMP      NZ, _SendSpec_9_1
+
+_SendSpec_9_b: 
+                    COMPARE   sD, 02               ; third PIN
+                    JUMP      NZ, _SendSpec_9_1
+                    LOAD      sE, Pin1
+                    JUMP      NZ, _SendSpec_9_1
+
+_SendSpec_9_1: 
+                    LOAD      sF, 00
+
+_SendSpec_9_Loop: 
+
+                    CALL      ReadFromRAMBlock    ; reads from RAM address IN: sE(low), sF; RETURNS chars in sA (low) and sB (high)
+
+                    COMPARE   sA, 00               ; is it the last character
+                    JUMP      Z, _SendSpecialBGEnd; finish if so
+                    CALL      SendCharToBluegiga  ; send character in sA
+
+                    LOAD      sA, sB              ; copy second character
+                    COMPARE   sA, 00               ; is it the last character
+                    JUMP      Z, _SendSpecialBGEnd; finish if so
+                    CALL      SendCharToBluegiga  ; send character in sA
+
+                    ADD       sE, 01               ; next
+                    ADDCY      sF, 00
+
+                    JUMP      _SendSpec_9_Loop
+
+
+
+_SendSpecialBGEnd: 
+                    LOAD      sA, 00
+                    ADD       sA, 00               ; make sure return code is Z always
+
+                    RETURN       
+
+
+
+; ;; sE has control channel from Message
+; ;; stores currentAudio, currentChannel and currentType and returns in sD, sE and sF
+
+GetChannelFromControl: 
+
+                    FETCH     sF, ControlChannel1 ; check Control Channel 1
+                    COMPARE   sE, sF              ; compare with that from message
+                    JUMP      Z, GetChannelFromMAC1; jump if so to load parameters
+
+                    FETCH     sF, ControlChannel2 ; check Control Channel 2
+                    COMPARE   sE, sF              ; compare with that from message
+                    JUMP      Z, GetChannelFromMAC2; jump if so to load parameters
+
+                    FETCH     sF, ControlChannel3 ; check Control Channel 3
+                    COMPARE   sE, sF              ; compare with that from message
+                    JUMP      Z, GetChannelFromMAC3; jump if so to load parameters
+
+
+                    JUMP      GetChannelFromMAC9  ; set 0 and store parameters
+
+; ;; sC points to the MAC address
+; ;; stores currentAudio, currentChannel and currentType and returns in sD, sE and sF
+; ;; corrupts sC
+
+GetChannelFromMAC: 
+                    STORE     sC, TempStore
+
+                    LOAD      sA, HeadsetMACAddress1; is it the first MAC
+                    CALL      MatchSimpleString
+                    JUMP      Z, GetChannelFromMAC1
+
+                    FETCH     sC, TempStore       ; recover sC
+                    LOAD      sA, HeadsetMACAddress2; is it the second MAC
+                    CALL      MatchSimpleString
+                    JUMP      Z, GetChannelFromMAC2
+
+                    FETCH     sC, TempStore       ; recover sC
+                    LOAD      sA, HeadsetMACAddress3; is it the second MAC
+                    CALL      MatchSimpleString
+                    JUMP      Z, GetChannelFromMAC3
+
+GetChannelFromMAC9: 
+                    LOAD      sD, 00
+                    LOAD      sE, 00
+                    LOAD      sC, 00
+
+                    JUMP      GetChannelFromCommon
+
+GetChannelFromMAC1: 
+                    LOAD      sA, "1"
+                    CALL      SendToUserPico
+
+                    LOAD      s0, 01
+                    FETCH     sD, AudioChannel1
+                    FETCH     sE, ControlChannel1
+                    FETCH     sF, ConnectType1
+
+                    JUMP      GetChannelFromCommon
+
+GetChannelFromMAC2: 
+                    LOAD      sA, "2"
+                    CALL      SendToUserPico
+
+                    LOAD      s0, 02
+                    FETCH     sD, AudioChannel2
+                    FETCH     sE, ControlChannel2
+                    FETCH     sF, ConnectType2
+
+                    JUMP      GetChannelFromCommon
+
+GetChannelFromMAC3:
+                    LOAD      sA, "3"
+                    CALL      SendToUserPico
+
+                    LOAD      s0, 03
+                    FETCH     sD, AudioChannel3
+                    FETCH     sE, ControlChannel3
+                    FETCH     sF, ConnectType3
+
+
+GetChannelFromCommon: 
+                    LOAD      s3, sF              ; debug
+
+                    LOAD      sA, "@"             ; debug
+                    CALL      SendToUserPico
+                    LOAD      sA, s0
+                    ADD       sA, "0"
+                    CALL      SendToUserPico
+                    LOAD      sF, s3              ; debug
+
+                    STORE     s0, IndexSelected
+
+                    STORE     sD, CurrentAudio
+                    STORE     sE, CurrentChannel
+                    STORE     sF, CurrentType
+
+                    FETCH     sC, TempStore
+
+                    RETURN       
+; ; ;
+; ; ;	Get the MAC string pointer according to the currently selected channel
+; ; ;
+; ; ;	sE is the current MAC address selected
+; ; ;
+; ; ;    returns address in sE
+GetMACFromLink: 
+                    COMPARE   sE, FIRST_CHANNEL   ; test first link
+                    JUMP      Z, _Link1           ; is first link
+
+                    COMPARE   sE, SECOND_CHANNEL  ; test second link
+                    JUMP      Z, _Link2           ; is second link
+
+                    COMPARE   sE, THIRD_CHANNEL   ; test third link
+                    JUMP      Z, _Link3           ; is third link
+
+; invalid call - do nothing - log error?
+
+                    LOAD      sF, 00
+                    STORE     sF, IndexSelected
+
+                    RETURN       
+
+_Link1: 
+                    LOAD      sE, HeadsetMACAddress1; load address of first MAC
+                    LOAD      sF, 01
+                    STORE     sF, IndexSelected
+                    RETURN                        ; return address
+
+_Link2: 
+                    LOAD      sE, HeadsetMACAddress2; load address of first MAC
+                    LOAD      sF, 02
+                    STORE     sF, IndexSelected
+                    RETURN                        ; return address
+
+_Link3: 
+                    LOAD      sE, HeadsetMACAddress3; load address of first MAC
+                    LOAD      sF, 03
+                    STORE     sF, IndexSelected
+                    RETURN                        ; return address
+
+
+
+
+
+; ;;
+; ;;	Copy the MAC string according to the currently selected channel
+; ;;
+
+
+CopyMACFromLink: 
+
+                    CALL      GetMACFromLink      ; get the MAC address pointer
+
+_CopyLinkExecute: 
+
+                    LOAD      sD, s6              ; copy target address
+                    LOAD      sC, MAC_ADDRESS_LENGTH; length to copy = 18 including end space char
+
+                    CALL      CopyFromRAMtoScratchpad; copy from BT RAM area to scratchpad
+
+                    RETURN       
+
+
+; sC is the incoming MAC address
+
+; ;; Checks whether the callers MAC address in sC matches any of the 3 MACs we have stored
+; ;;
+; ;; If so then the current Index selected is set to this channel.
+; ;;
+; ;; If there is no match then the MAC address will be stored in the first available slot
+; ;; and the Current Index set to this slot.
+; ;;
+
+StoreMACByLink: 
+
+                    LOAD      s8, sC              ; remember the MAC address in the buffer from sC to s8
+                    FETCH     sF, HeadsetMACAddress1; get the first char of first MAC
+                    ADD       sF, 00               ; check for empty
+                    JUMP      Z, _StoreMac_1      ; No mac in first slot
+
+                    LOAD      s7, 17'd              ; count of characters
+                    LOAD      s9, HeadsetMACAddress1; address of first MAC
+
+_CheckLoopA: 
+                    FETCH     sF, (s8)            ; get character from buffer
+                    FETCH     sE, (s9)             ; get character from MAC address
+                    COMPARE   sF, sE
+                    JUMP      NZ, _StoreMac_Not1  ; not MAC 1
+                    ADD       s8, 01
+                    ADD       s9, 01
+                    SUB       s7, 01
+                    JUMP      NZ, _CheckLoopA     ; loop round
+
+; LOAD  sA, 'r' 				  ; debug - 'r' = MAC already in first slot
+; CALL  SendToUserPico
+
+                    LOAD      s0, 01               ; MAC matches that in first slot
+                    STORE     s0, IndexSelected   ; remember the channel
+
+                    ADD       s0, 00               ; set return code to NZ
+
+                    RETURN                        ; MAC is channel 1 already stored
+
+_StoreMac_1: 
+                    LOAD      s0, 01               ; MAC matches that in first slot
+                    STORE     s0, IndexSelected   ; remember the channel
+
+; LOAD      sA, 'a'                 ; debug - 'a' = storing MAC in first slot
+; CALL      SendToUserPico
+
+                    LOAD      s9, HeadsetMACAddress1; address of first MAC
+
+                    JUMP      _StoreMac_UseThis   ; store the incoming MAC address
+
+_StoreMac_Not1: 
+                    LOAD      s8, sC              ; remember the MAC address in the buffer
+                    FETCH     s9, HeadsetMACAddress2; get the first char of second MAC
+                    ADD       s9, 00               ; check for empty
+                    JUMP      Z, _StoreMac_2      ; NO mac in second slot
+
+                    LOAD      s7, 17'd            ; count of characters
+                    LOAD      s9, HeadsetMACAddress2; address of second MAC
+
+_StoreMac_LoopB: 
+
+
+                    FETCH     sF, (s8)            ; get character from buffer
+                    FETCH     sE, (s9)            ; get character from MAC address
+                    COMPARE   sF, sE
+                    JUMP      NZ, _StoreMac_Not2  ; not MAC 2
+                    ADD       s8, 01
+                    ADD       s9, 01
+                    SUB       s7, 01
+                    JUMP      NZ, _StoreMac_LoopB ; loop round
+
+
+; LOAD  sA, 's'				; debug message - use link 2
+; CALL  SendToUserPico
+
+
+                    LOAD      s0, 02               ; MAC matches that in second slot
+                    STORE     s0, IndexSelected   ; remember the channel
+
+                    ADD       s0, 00               ; set return code to NZ
+
+                    RETURN                        ; MAC is channel 2
+
+_StoreMac_2: 
+; LOAD  sA, 'b'                 ; debug
+; CALL  SendToUserPico
+
+                    LOAD      s0, 02               ; MAC matches that in second slot
+                    STORE     s0, IndexSelected   ; remember the channel
+
+                    LOAD      s9, HeadsetMACAddress2; address of second MAC
+
+                    JUMP      _StoreMac_UseThis   ; store the incoming MAC address
+
+
+_StoreMac_Not2: 
+
+                    LOAD      s8, sC              ; remember the MAC address in the buffer
+                    FETCH     s9, HeadsetMACAddress3; get the first char of third MAC
+                    ADD       s9, 00               ; check for empty
+                    JUMP      Z, _StoreMac_3      ; NO mac in third slot
+
+                    LOAD      s7, 17'd              ; count of characters
+                    LOAD      s9, HeadsetMACAddress3; address of third MAC
+
+_StoreMac_LoopC: 
+                    FETCH     sF, (s8)            ; get character from buffer
+                    FETCH     sE, (s9)            ; get character from MAC address
+                    COMPARE   sF, sE
+                    JUMP      NZ, _StoreMac_Not3  ; not MAC 3
+                    ADD       s8, 01
+                    ADD       s9, 01
+                    SUB       s7, 01
+                    JUMP      NZ, _StoreMac_LoopC ; loop round
+
+; LOAD  sA, 't'                 ; debug
+; CALL  SendToUserPico
+
+                    LOAD      s0, 03               ; MAC matches that in third slot
+                    STORE     s0, IndexSelected   ; remember the channel
+
+                    ADD       s0, 00               ; set return code to NZ
+
+                    RETURN                        ; MAC is channel 3
+
+_StoreMac_3: 
+; LOAD  sA, 'c'                 ; debug
+; CALL  SendToUserPico
+
+                    LOAD      s0, 03               ; MAC matches that in third slot
+                    STORE     s0, IndexSelected   ; remember the channel
+
+                    LOAD      s9, HeadsetMACAddress3; address of third MAC
+
+                    JUMP      _StoreMac_UseThis   ; store the incoming MAC address
+
+
+_StoreMac_Not3: 
+
+                    LOAD      s0, 01              ; assume first slot
+                    LOAD      s9, HeadsetMACAddress1; get the first char of first MAC
+                    FETCH     sF, (s9)            ; get first character
+                    ADD       sF, 00              ; check for empty
+                    JUMP      Z, _StoreMac_UseThis; NO mac in first slot
+
+                    LOAD      s0, 02              ; assume second slot
+                    LOAD      s9, HeadsetMACAddress2; get the first char of second MAC
+                    FETCH     sF, (s9)            ; get first character
+                    ADD       sF, 00              ; check for empty
+                    JUMP      Z, _StoreMac_UseThis; NO mac in second slot
+
+                    LOAD      s0, 03              ; assume third slot
+                    LOAD      s9, HeadsetMACAddress2; get the first char of third MAC
+                    FETCH     sF, (s9)            ; get first character
+                    ADD       sF, 00              ; check for empty
+                    JUMP      Z, _StoreMac_UseThis; NO mac in second slot
+
+                    LOAD      s0, 00              ; return no slot free
+                    ADD       s0, 00              ; set return code = Z for no slots
+
+                    RETURN       
+
+_StoreMac_UseThis:                                ; s9 points to MAC address storage
+                    STORE     s0, IndexSelected   ; set current message channel
+
+; LOAD  sA, 'k'                 ; debug - say we are storing MAC address
+; CALL  SendToUserPico
+
+                    LOAD      s8, sC              ; remember the MAC address in the buffer
+                    LOAD      s7, 17'd              ; count of characters
+
+_StoreMac_UseThis_Loop: 
+                    FETCH     sF, (s8)            ; read MAC from Bluegiga buffer
+                    STORE     sF, (s9)            ; store in MAC buffer
+                    ADD       s8, 01              ; next Bluegiga buffer address
+                    ADD       s9, 01              ; next MAC storage address
+                    SUB       s7, 01              ; count down
+                    JUMP      NZ, _StoreMac_UseThis_Loop; loop till all copied
+
+                    LOAD      sF, 00              ; store 0 to terminate
+                    STORE     sF, (s9)            ; store in MAC buffer					
+
+                    ADD       sF, 01              ; set return code to NZ
+
+                    RETURN                        ; MAC copied and IndexSelected set					
+
+DebugReport: 
+
+                    CALL      Send_CR_LF_ToUser
+; LOAD      sA, '<'
+; CALL      SendToUserPico
+
+                    LOAD      s9, HeadsetMACAddress1; get the first MAC
+                    LOAD      s7, 17'd              ; count of characters
+
+_DebugReportLoop1: 
+                    FETCH     sA, (s9)            ; get character from MAC 1
+                    ADD       sA, 00
+                    JUMP      Z, _DebugReportDone1
+                    CALL      SendToUserPico
+                    ADD       s9, 01
+                    SUB       s7, 01               ; next
+                    JUMP      NZ, _DebugReportLoop1; 
+_DebugReportDone1: 
+; LOAD      sA, '>'
+; CALL      SendToUserPico
+
+                    LOAD      sA, "."
+                    CALL      SendToUserPico
+
+                    FETCH     sA, ConnectType1
+                    ADD       sA, "0"
+                    CALL      SendToUserPico
+
+                    LOAD      sA, "."
+                    CALL      SendToUserPico
+
+                    FETCH     sA, ControlChannel1
+                    CALL      SendToUserPico
+
+                    LOAD      sA, "."
+                    CALL      SendToUserPico
+
+                    FETCH     sA, AudioChannel1
+                    CALL      SendToUserPico
+
+                    LOAD      sA, "."
+                    CALL      SendToUserPico
+
+                    CALL      Send_CR_LF_ToUser
+                    CALL      delay_10ms
+
+; LOAD      sA, '<'
+; CALL      SendToUserPico
+
+                    LOAD      s9, HeadsetMACAddress2; get the second MAC
+                    LOAD      s7, 17'd              ; count of characters
+
+_DebugReportLoop2: 
+                    FETCH     sA, (s9)            ; get character from MAC 1
+                    ADD       sA, 00
+                    JUMP      Z, _DebugReportDone2
+                    CALL      SendToUserPico
+                    ADD       s9, 01
+                    SUB       s7, 01               ; next
+                    JUMP      NZ, _DebugReportLoop2; 
+_DebugReportDone2: 
+; LOAD      sA, '>'
+; CALL      SendToUserPico
+
+
+                    LOAD      sA, "."
+                    CALL      SendToUserPico
+
+                    FETCH     sA, ConnectType2
+                    ADD       sA, "0"
+                    CALL      SendToUserPico
+
+                    LOAD      sA, "."
+                    CALL      SendToUserPico
+
+                    FETCH     sA, ControlChannel2
+                    CALL      SendToUserPico
+
+                    LOAD      sA, "."
+                    CALL      SendToUserPico
+
+                    FETCH     sA, AudioChannel2
+                    CALL      SendToUserPico
+
+                    CALL      Send_CR_LF_ToUser
+                    CALL      delay_10ms
+
+; LOAD      sA, '<'
+; CALL      SendToUserPico
+
+                    LOAD      s9, HeadsetMACAddress3; get the third MAC
+                    LOAD      s7, 17'd              ; count of characters
+
+_DebugReportLoop3: 
+                    FETCH     sA, (s9)              ; get character from MAC 1
+                    ADD       sA, 00
+                    JUMP      Z, _DebugReportDone3
+                    CALL      SendToUserPico
+                    ADD       s9, 01
+                    SUB       s7, 01               ; next
+                    JUMP      NZ, _DebugReportLoop3; 
+_DebugReportDone3: 
+; LOAD      sA, '>'
+; CALL      SendToUserPico
+
+                    ;LOAD      sA, "."
+                    ;CALL      SendToUserPico
+
+                    ;FETCH     sA, ConnectType3
+                    ;ADD       sA, '0'
+                    ;CALL      SendToUserPico
+
+; LOAD      sA, '.'
+; CALL  SendToUserPico
+
+; FETCH     sA, ControlChannel3
+; CALL  SendToUserPico
+
+; LOAD      sA, '.'
+; CALL  SendToUserPico
+
+; FETCH     sA, AudioChannel3
+; CALL  SendToUserPico
+
+                    CALL      Send_CR_LF_ToUser
+                    CALL      delay_10ms
+
+; CALL      Send_CR_LF_ToUser
+
+; CALL      Delay1ms
+
+                    RETURN      
+
+
+; ;; ===========================================================================
+; ;;;
+; ;; Match a string
+; ;;
+; ;;  sA = address in scratchpad RAM; sC = match against in scratchpad
+; ;;
+; ;;  Returns Z if matched;  sA and sC points to next character in scratchpad
+; ;;
+; ;;
+MatchSimpleString: 
+
+                    LOAD      sB, sA
+
+
+; LOAD	sA, '<'
+; CALL      SendToUserPico					
+
+; LOAD sD, sC
+; MatchSimpleStringDeb1:										
+; FETCH	sA, sD
+; ADD		sA, 0
+; JUMP   Z, MatchSimpleStringDeb2
+; CALL      SendToUserPico
+; ADD		sD, 1
+; JUMP  MatchSimpleStringDeb1
+
+; MatchSimpleStringDeb2:
+
+; LOAD	sA, '>'
+; CALL      SendToUserPico					
+; LOAD	sA, '{'
+; CALL      SendToUserPico					
+
+; LOAD sD, sB
+; MatchSimpleStringDeb3:										
+; FETCH	sA, sD
+; ADD		sA, 0
+; JUMP   Z, MatchSimpleStringDeb4
+; CALL      SendToUserPico
+; ADD		sD, 1
+; JUMP  MatchSimpleStringDeb3
+
+; MatchSimpleStringDeb4:					
+
+; LOAD	sA, '}'
+; CALL      SendToUserPico					
+; LOAD	sA, '@'
+; CALL      SendToUserPico
+
+
+MatchSimpleStringLoop: 
+
+; LOAD	sA, '<'
+; CALL      SendToUserPico
+; FETCH	sA, sC						; message character
+; CALL      SendToUserPico
+
+; LOAD	sA, ' '
+; CALL      SendToUserPico
+; FETCH	sA, sB						; MAC address character
+; CALL      SendToUserPico
+
+; LOAD	sA, '>'
+; CALL      SendToUserPico
+
+                    FETCH     sE, (sC)            ; message character
+                    FETCH     sF, (sB)            ; MAC address character
+
+
+                    ADD       sF, 00               ; finished?
+                    JUMP      Z, MatchSimpleStringEq
+
+                    COMPARE   sF, sE              ; 
+                    RETURN    NZ
+
+                    ADD       sC, 01
+                    ADD       sB, 01
+
+                    JUMP      MatchSimpleStringLoop
+
+MatchSimpleStringEq: 
+
+                    ADD       sE, 00               ; if other string also 0 then matched
+                    RETURN    Z                   ; so return Z				
+
+                    COMPARE   sE, " "             ; else make sure the character is space
+                    RETURN    Z                   ; return Z if OK
+
+; LOAD	sA, '*'   ; debug
+; CALL      SendToUserPico					
+
+                    ADD       sF, 00               ; else make NZ
+
+                    RETURN       
+
+; ;; ===========================================================================
+; ;;;
+; ;; Match a string
+; ;;
+; ;;  s6 = message number in RAM; sC = match against in scratchpad
+; ;;
+; ;;  Returns Z if matched;  sC points to next character in scratchpad
+; ;;
+; ;;
+
+MatchMessageToString:                             ; match a received message against a string
+
+_MatchString: 
+
+                    CALL      ComputeRAMAddress   ; Takes address in s6, and converts to address in RAM in s6, s7
+
+_MatchStringNext: 
+
+                    LOAD      sE, s6              ; address in RAM
+                    LOAD      sF, s7              ; address in RAM					
+                    CALL      ReadFromRAMBlock    ; reads from RAM address IN: sE(low), sF; RETURNS chars in sA (low) and sB (high)
+
+                    ADD       sA, 00               ; set condition code
+                    RETURN    Z                   ; return Z if all done
+
+                    FETCH     sF, (sC)            ; get character from scratchpad
+
+                    COMPARE    sA, "?"             ; ignore this one?
+                    JUMP      Z, _MatchStringNextA; skip if so
+                    COMPARE   sF, sA              ; does it match
+                    RETURN    NZ                  ; return if not
+
+_MatchStringNextA: 
+                    ADD       sC, 01               ; next address in scratchpad
+
+                    ADD       sB, 00               ; set condition code
+                    RETURN    Z                   ; return Z if all done
+
+                    FETCH     sF, (sC)            ; get character from scratchpad
+                    COMPARE   sB, "?"             ; ignore this one?
+                    JUMP      Z, _MatchStringNextB; skip if so
+                    COMPARE   sF, sB              ; does it match
+                    RETURN    NZ                  ; return if not
+
+_MatchStringNextB: 
+                    ADD       sC, 01               ; next address in scratchpad
+
+                    ADD       s6, 01               ; next pair in RAM
+                    ADDCY     s7, 00               ; ditto
+
+                    JUMP      _MatchStringNext    ; next pair
+
+
+; ;; ===========================================================================
+; ;;;
+; ;;                                                ComputeRAMAddress
+; ;;
+; ;; Takes address in s6, and converts to address in RAM in s6, s7
+; ;; by multiplying by 4.
+; 
+ComputeRAMAddress: 
+
+                    LOAD      s7, 00               ; upper RAM address
+                    SL0       s6                  ; multiply by 2
+                    SLA       s7
+                    SL0       s6                  ; by 4, but not by 8 as BT RAM stores in pairs
+                    SLA       s7
+
+                    RETURN       
+
+
+
+
+; read from the RAM block to registers		
+
+; sE lower address in RAM
+; sF is upper address in RAM
+
+; returns lower byte in sA, upper byte in sB
+
+; ReadFromRAMBlock    ; reads from RAM address IN: sE(low), sF; RETURNS chars in sA (low) and sB (high)
+
+ReadFromRAMBlock: 
+
+                    OUTPUT    sE, RAM_Addr_LSB
+                    OUTPUT    sF, RAM_Addr_MSB
+
+                    LOAD      sA, 00               ; give the FPGA time to retrieve from RAM
+
+                    INPUT     sB, RAM_DataIn_LSB
+                    INPUT     sA, RAM_DataIn_MSB
+
+                    RETURN       
+
+
+
+
+
+; ;; ===========================================================================
+; ;; ===========================================================================
+; ;;
+; ;;                                                ReadFromRAMBlock
+; ;;
+; sE lower address in RAM
+; sF is upper address in RAM
+
+; sD - target address in scratchpad
+; 
+; sC - number of characters
+
+; characters read from RAM is returned in stored in scratchpad at sB
+; 
+; uses sA and SB
+
+; CopyFromRAMtoScratchpad  ; copy from RAM; IN: addr sE(low), sF(high)  SD target sC byte count ; returns copied
+
+
+CopyFromRAMtoScratchpad: 
+
+_CopyFromRAMtoScratchpadLoop: 
+                    CALL      ReadFromRAMBlock    ; reads from RAM address sE, sF to registers sA (low) and sB (high)
+
+                    STORE     sA, (sD)            ; store first byte					
+                    ADD       sD, 01              ; next scratchpad address
+
+                    SUB       sC, 01              ; count down
+                    JUMP      Z, _CopyFromRAMtoScratchpadFinish
+
+                    STORE     sB, (sD)            ; store second byte										
+                    ADD       sD, 01              ; next scratchpad address
+
+                    ADD       sE, 01               ; next RAM address
+                    ADDCY     sF, 00               ; 16 bit arithmetic
+
+                    SUB       sC, 01              ; count down
+                    JUMP      NZ, _CopyFromRAMtoScratchpadLoop
+
+_CopyFromRAMtoScratchpadFinish: 
+                    RETURN       
+
+
+
+
+; ;; ===========================================================================
+; ;; ===========================================================================
+; ;  DEBUGGING - TAKE CHARACTER and CONVERT to 2 HEX DIGITS
+
+; Byte2Chars:  takes data in sA and returns two ascii codes in sD (upper) ,sC (lower 4 bits)
+; 
+; Uses sF
+
+
+Send_CR_LF_ToUser: 
+                    LOAD      sA, 13'd           ; carriage return
+                    CALL      SendToUserPico      ; must be supplied outside
+                    LOAD      sA, 10'd           ; line feed
+                    CALL      SendToUserPico      ; ditto
+                    RETURN       
+
+
+ByteToCharsToUser: 
+                    STORE     sA, 127'd             ; store sA
+                    CALL      ByteToChars         ; convert to characters in sC and sD
+                    LOAD      sA, sD              ; second character 
+                    CALL      SendToUserPico      ; send
+                    LOAD      sA, sC              ; first character
+                    CALL      SendToUserPico      ; send
+                    FETCH     sA, 127'd             ; restore sA
+                    RETURN       
+
+ByteToChars: 
+                    LOAD      sF, sA              ; assumes 8 bit data is in sA
+                    SR0       sF                  ; / 2
+                    SR0       sF                  ; / 4
+                    SR0       sF                  ; / 8
+                    SR0       sF                  ; shift right 4 bits to get first (upper) hex character
+                    CALL      _GetChar            ; make ascii
+                    LOAD      sD, sF              ; return to caller
+
+                    LOAD      sF, sA              ; copy again
+                    AND       sF, 0F             ; mask to lower nibble
+                    CALL      _GetChar            ; make ascii
+                    LOAD      sC, sF              ; return to caller
+                    RETURN       
+
+; routine to convert 4bit value in s5 to an ascii code, returned in s5
+_GetChar:           SUB       sF, 10'd            ; Test if sC greater than 9
+                    JUMP      C, _is_0_9          ; Hex character is 0_9
+                    ADD       sF, "A"             ; offset for Ascii code 'A'
+                    RETURN       
+_is_0_9:            ADD       sF, 10'd            ; return to range 0-9
+                    ADD       sF, "0"             ; offset to Ascii code for '0'
+                    RETURN       
+
+
+
+
+; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+; 
+; 	Timer routines
+; 
+; Registers used sB, sC, sD, sE and sF.
+; 
+
+CONSTANT   delay_1us_constant,	12'd                ; Value (13)19 or 12? decimal suitable for 50MHz clock � about 8 for 20MHz
+CONSTANT   count_1000_lsb,		E8                 	; lower 8-bits of 1000 count value
+CONSTANT   count_1000_msb,		03                  ; upper 8-bits of 1000 count value
+
+
+
+Delay1Second: 
+delay_1s:           LOAD      sB, 00               ; clear cycle counter
+                    LOAD      sC, 00
+wait_1s:            CALL      delay_1ms
+                    ADD       sC, 01               ; increment cycle counter
+                    ADDCY     sB, 00
+                    COMPARE   sC, count_1000_lsb  ; test for 1000ms
+                    JUMP      NZ, wait_1s
+                    COMPARE   sB, count_1000_msb
+                    JUMP      NZ, wait_1s
+                    RETURN       
+; 
+; Delays of approximately 200ms and 300ms used for LCD display scrolling
+; 
+; 
+; Registers used sB through sF
+; 
+delay_300ms:        CALL      delay_100ms
+delay_200ms:        CALL      delay_100ms
+                    CALL      delay_100ms
+                    RETURN       
+; 
+; Delay of approximately 100ms used for switch debounce
+; 
+; Registers used s0, s1, s2, s3 and s4.
+; 
+delay_100ms:        LOAD      sC, 100'd             ; repeat 1ms delay 100 times
+wait_100ms:         CALL      delay_1ms
+                    SUB       sC, 01
+                    JUMP      NZ, wait_100ms
+
+delay_10ms:         LOAD      sC, 10'd           ; repeat 1ms delay 100 times
+wait_10ms:          CALL      delay_1ms
+                    SUB       sC, 01
+                    JUMP      NZ, wait_10ms      
+; 
+
+                    RETURN       
+; 
+; Delay of approximately 1ms required by LCD display
+; 
+; Registers used s0, s1, s2 and s3.
+; 
+
+Delay1ms: 
+delay_1ms:          LOAD      sD, 00               ; clear cycle counter
+                    LOAD      sE, 00
+wait_1ms:           CALL      delay_1us
+                    ADD       sE, 01               ; increment cycle counter
+                    ADDCY     sD, 00
+                    COMPARE   sE, count_1000_lsb  ; test for 1000us
+                    JUMP      NZ, wait_1ms
+                    COMPARE   sD, count_1000_msb
+                    JUMP      NZ, wait_1ms
+                    RETURN       
+; 
+; Delay of approximately 50us required by LCD display
+; 
+; Registers used s0 and s1.
+; 
+delay_50us:         LOAD      sE, 50'd              ; repeat 1us delay 50 times
+wait_50us:          CALL      delay_1us
+                    SUB       sE, 01
+                    JUMP      NZ, wait_50us
+                    RETURN       
+
+; Delay of approximately 1us used to provide timing reference for
+; LCD operations. This must be adjusted to reflect the clock
+; applied to KCPSM3. The provided code is for a 50MHz clock rate.
+; 
+; The software delay loop is formed using register s0. This register
+; must be loaded with an integer value close to the result of....
+; 
+; value =  (clock_rate - 4)/4          Where 'clock_rate' is in MHz
+; 
+; So for a 50MHz clock the value is (50-4)/4 = 11.5 and 12 would be used.
+; For clock rates below 8MHz the value of 1 must be used and the I2C bus
+; operation will become lower than the 100KHz target intended.
+; 
+; Register used s0.
+; 
+
+delay_1us:          LOAD      sF, delay_1us_constant; delay value of 12 decimal for a 50MHz clock
+wait_1us:           SUB       sF, 01
+                    JUMP      NZ, wait_1us
+                    RETURN       
+
+
+; 
+
+
+
+CONSTANT	Pin1,				0'd
+CONSTANT	Pin2,				3'd
+CONSTANT	Pin3,				6'd
+CONSTANT	StartupMessages,	9'd
+CONSTANT	StartupMessagesLower,	0'd
+CONSTANT	EmptyMessage,		7'd
+CONSTANT	N3Name,				8'd
+CONSTANT	SetClassMsg,		11'd
+CONSTANT	SetEchoReq,			14'd
+CONSTANT	SetPinCodeMsg,		17'd
+CONSTANT	SetBTPairNone,		19'd
+CONSTANT	SetControlConfig,	21'd
+CONSTANT	SetProfileHandsFreeMsg,	24'd
+CONSTANT	SetAD2PProfileON,	27'd
+CONSTANT	SetProfileHFPMsg,	30'd
+CONSTANT	SetProfileHSPMsg,	33'd
+CONSTANT	SetControlPCMMsg,	36'd
+CONSTANT	StatusService1Msg,	40'd
+CONSTANT	SCOEnableMsg,		43'd
+CONSTANT	SCO_Multiple_Msg,	45'd
+CONSTANT	ResetMsg,			50'd
+CONSTANT	InquiryMsg,			51'd
+CONSTANT	PairReqMsg,			53'd
+CONSTANT	KillMsg,			54'd
+CONSTANT	CallHFP_AGMsg,		55'd
+CONSTANT	CallHSP_AGMsg,		58'd
+CONSTANT	CallA2DPMsg,		61'd
+CONSTANT	SETInquiryMsg,		63'd
+CONSTANT	SCO_Open,			64'd
+CONSTANT	SCO_OpenRFCOMM,		66'd
+CONSTANT	SCO_Close,			68'd
+CONSTANT	OKMsg,				70'd
+CONSTANT	InquiryReply,		71'd
+CONSTANT	ConnectMsg,			73'd
+CONSTANT	ConnectHSPMsg,		75'd
+CONSTANT	ConnectSCOMsg,		77'd
+CONSTANT	CallReplyMsg,		79'd
+CONSTANT	RingMsg,			80'd
+CONSTANT	HFP_AG_Ready_Msg,	81'd
+CONSTANT	HFP_AG_Dial_Last,	83'd
+CONSTANT	HSP_Button_Msg,		86'd
+CONSTANT	PairReply,			88'd
+CONSTANT	HFP_AG_NoCarrierMsg,	89'd
+CONSTANT	NoCarrierMsg,		92'd
+CONSTANT	ReadyMsg,			95'd
+CONSTANT	BT_HFP_AG,			96'd
+CONSTANT	BT_HSP_AG,			97'd
+CONSTANT	BT_COMPUTER,		98'd
+CONSTANT	BT_HFP_AG_STRING,	99'd
+CONSTANT	BT_HSP_AG_STRING,	100'd
+CONSTANT	BT_COMPUTER_STRING,	101'd
+CONSTANT	BT_RFCOMM_STRING,	102'd
+CONSTANT	N3COMMAND,			103'd
+CONSTANT	PC_READ_PAGE_MSG,	104'd
+CONSTANT	PC_WRITE_PAGE_MSG,	105'd
+CONSTANT	PC_WRITE_TXT_MSG,	106'd
+CONSTANT	PC_READ_MSG,		107'd
+CONSTANT	PC_ESC_MSG,			108'd
+CONSTANT	PC_ACK_MSG,			109'd
+CONSTANT	PC_NAK_MSG,			110'd
+CONSTANT	PC_WRITE_MSG,		111'd
+CONSTANT	PC_ERASE_MSG,		112'd
+
+
+
+

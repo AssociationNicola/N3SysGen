@@ -1,0 +1,888 @@
+;A0 is version to get start and stop tone levels for speaker switching.
+;
+;99 - add latch on button facility so don't need handset plugged in.
+;Now display signal level and gain setting
+;Switch off key pad oscillation and
+;Mod to read key pad and display
+;Version using CoutA
+;Need to mod to send TX request to User when touchdown active
+
+;May 10
+; 
+; KeyPad routine for SSB picoblaze
+;
+CONSTANT	LCD_RS,			1'd                   ; bit0 - Register Select - command(0) or data(1)
+CONSTANT	LCD_RW,			2'd                   ; bit1 - read(1) or write(0)
+CONSTANT	LCD_E,			4'd                   ; bit2 - Enable(1)
+
+
+; Registers
+NAMEREG sF, LCD_data		;            EQU       sF                  ; registers used for data and control of LCD
+NAMEREG	sE, LCD_control		;         EQU       sE                  ; E=bit2,  R/W=bit1,  RS=bit0
+NAMEREG	sD, cursor_position	;     EQU       sD                  ; register to define cursor position on LCD display
+;sB and sC also used for temporary character storage
+
+
+
+CONSTANT	delay_1us_constant,			12'd                  ; Value (13)19 or 12? decimal suitable for 50MHz clock – about 8 for 20MHz
+CONSTANT	count_1000_lsb,				E8                 	; hex lower 8-bits of 1000 count value
+CONSTANT	count_1000_msb,				03                  ; hex upper 8-bits of 1000 count value
+
+
+
+; Input port - port numbering changed June 11
+CONSTANT	Command,				0'd                   ; From main pico
+CONSTANT	TouchSignal,			1'd					  ;This is PTT
+CONSTANT	RAMdataInLSB,			2'd
+CONSTANT	RAMdataInMSB,			3'd
+CONSTANT	KP2userbufferFull,		4'd					  ;Bit 0 KP2User buffer full, Bit 1 Touch counter running
+CONSTANT	TouchSignal2,			5'd					  ;This is keypad
+CONSTANT	ADCpeak,				6'd
+CONSTANT	DemodPeak,				7'd
+;CONSTANT	SignalLevel,			8'd
+CONSTANT	StartToneA,				8'd
+CONSTANT	StartToneALong,			9'd
+CONSTANT	StartToneB,				10'd
+CONSTANT	StartToneBLong,			11'd
+CONSTANT	StopToneA,				12'd
+CONSTANT	StopToneALong,			13'd
+CONSTANT	StopToneB,				14'd
+CONSTANT	StopToneBLong,			15'd
+
+
+; Output ports
+CONSTANT	CmdToUser,				0'd
+CONSTANT	LCD_data_port,			1'd
+CONSTANT	LCD_control_port,		2'd
+CONSTANT	LCDcontrast,			3'd
+CONSTANT	Data2ArchiveMSB,		4'd
+CONSTANT	Data2ArchiveLSB,		5'd
+CONSTANT	Controlbits,			6'd
+;Bit offsets:
+CONSTANT	AckFIFO,				32'd                  ; 		bit 5 Acknowledge FIFO (present character)
+
+CONSTANT	RAM_ADD_MSB,			7'd				  ;Bits 0 and 1 top too address bits, bit 2 write RAM
+;Bit offsets:
+CONSTANT	WriteKPRAM,				4'd
+
+CONSTANT	RAM_ADD_LSB,			8'd
+CONSTANT	LatchOn,				9'd
+CONSTANT	RXFreqMSB,				10'd                  ; 7546 for 87.956kHz ie 86.956kHz carrier and allow range up to 154kHz 7555 Heyphone
+CONSTANT	RXFreqLSB,				11'd
+
+CONSTANT	TXFreqMSB,				12'd                  ; 3710  with 49MHz clock
+CONSTANT	TXFreqLSB,				13'd
+
+;TX frequencies:
+;Heyphone - 0e80
+;N2 -       0e7e
+;N3_31 -    052b
+
+;RX frequencies:
+;Heyphone  - $7555
+;N2  -       $7546
+;N3_31  -    $2aad
+
+
+
+
+
+; Scratchpad registers
+CONSTANT	TouchUpLevel,			0'd
+CONSTANT	TouchDownLevel,			1'd
+CONSTANT	TouchSelectLevel,		2'd
+CONSTANT	TX_F_MSB,				3'd
+CONSTANT	TX_F_LSB,				4'd
+CONSTANT	RX_F_MSB,				5'd
+CONSTANT	RX_F_LSB,				6'd
+CONSTANT	Freq2Set,				7'd		 ; values 0 nothing to set, 1>Hy, 2>N2, 3>N3 (31kHz)
+
+
+
+
+
+
+;;;GenerateCode        MEM       "KeyPadProg.mem"
+
+
+
+ cold_start:      	CALL      LCD_setup
+					
+welcome_message:    CALL      LCD_home             ; left hand of display
+                    LOAD      LCD_data, 78'd       ; character_N
+                    CALL      LCD_character_write
+;                    LOAD      LCD_data, character_i
+ ;                   CALL      LCD_character_write
+  ;                  LOAD      LCD_data, character_c
+   ;                 CALL      LCD_character_write
+    ;                LOAD      LCD_data, character_o
+     ;               CALL      LCD_character_write
+      ;              LOAD      LCD_data, character_l
+       ;             CALL      LCD_character_write
+        ;            LOAD      LCD_data, character_a
+         ;           CALL      LCD_character_write
+     ;               LOAD      LCD_data, character_space
+      ;              CALL      LCD_character_write
+                    LOAD      LCD_data, "3"
+					CALL      LCD_character_write
+                    LOAD      LCD_data, " "
+                    CALL      LCD_character_write
+                    
+initialise:			LOAD	  s0,00				 ;This is now used to drive PMOD1 which latches the device on!!
+					OUTPUT    s0,LatchOn	 ;Latch On if 1
+					
+					
+;set values for Heyphone by default
+	 				LOAD   	s0,01		 ;use \Heyphone
+	 				STORE 	s0,Freq2Set
+					CALL	UpdateFreqRegisters
+
+;Wait and check if ON still pressed						
+	  	  		    CALL	  delay_1s
+					INPUT	 s5,TouchSignal2
+					AND 	s5,0F
+
+					COMPARE	  s5,07			;is 'ON' pressed
+					JUMP	  NZ,loop			;if not ON button, skip
+					LOAD	  s0,01				 ;This is now used to drive PMOD1 which latches the device on!!
+					OUTPUT	  s0,LatchOn	 ;Latch On
+					
+					CALL	  delay_1s		 	;Wait so it doesn't detect as turn off!
+					CALL	  delay_1s		 	;Wait so it doesn't detect as turn off!
+					
+										
+					
+loop:				INPUT     s0, Command		  ;Check if FIFO character present
+                    COMPARE   s0, 128'd           ; is there a character?
+                    CALL      C, Respond2Fifo	  ;this should now receive value of mode from user pico and display on LCD
+                    
+                    INPUT	  s1,TouchSignal2
+                    AND 	  s1,0F
+                    COMPARE	  s1,0F			;0 if pressed - logic on proto2 is inverted
+                    CALL	  NZ,KeyPressed
+
+
+;;;;;;;;;;;;;Bit added to check touch switch - re-enable June 2013
+;					LOAD	  s1,02
+;					OUTPUT    s1,ChooseTouchKey
+;					LOAD	  s5,00
+;StayWaiting:		INPUT 	  s0,KP2userbufferFull
+;					ADD	     s5,01
+;					AND	     s0,02
+;					COMPARE  s0,02
+;					JUMP     Z,StayWaiting
+					
+;                    LOAD	  cursor_position,14'd	;position cursor at end of line   -Add this to get keypad level
+ ;                   CALL	  LCD_position_cursor
+
+;                    INPUT	  s5,Touchsignal2
+ ;                   CALL	  Displays5
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+                    INPUT	  s1,TouchSignal 	;This is PTT
+                    COMPARE	  s1,00			;0 if pressed - logic on proto2 is inverted
+                    JUMP	  Z,TouchDown
+                    
+;think touch is not pressed
+NotTouchDown:		CALL	  delay_100ms
+					INPUT	  s1,TouchSignal
+                    COMPARE	  s1,00			;check if pressed logic on proto2 is inverted
+                    JUMP	  Z,loop		;so is in fact pressed so escape
+                    LOAD	  cursor_position,04	;position cursor just after 'Nicola 3'
+                    CALL	  LCD_position_cursor
+                    LOAD	  s5,"r"			 ; character_r	 		  ;temp - shoulr be r !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+					LOAD      LCD_data, s5		 ;
+					OUTPUT    s5, CmdToUser
+                    CALL      LCD_character_write		;then write to LCD
+					JUMP	  loop
+
+;believe touch to be pressed
+TouchDown:			CALL	  delay_100ms
+					INPUT	  s1,TouchSignal
+                    COMPARE	  s1,00			;logic on proto2 is inverted
+                    JUMP	  NZ,loop		;so is not in fact pressed - escape
+					LOAD	  cursor_position,04	;position cursor just after 'Nicola 3'
+                    CALL	  LCD_position_cursor
+                    LOAD	  s5, "t"		; character_t
+					LOAD      LCD_data, s5		 ;
+					OUTPUT    s5, CmdToUser
+                    CALL      LCD_character_write		;then write to LCD
+					JUMP	  loop
+
+
+
+KeyPressed:			CALL	  delay_1s
+					INPUT	 s5,TouchSignal2
+					AND 	s5,0F
+
+					COMPARE	  s5,0F			;not $F if pressed
+                    RETURN	  Z				;return if key not still pressed
+                    
+					LOAD	cursor_position, C3	;position cursor
+                    CALL	LCD_position_cursor
+                    LOAD 	sB," "			; character_space
+                    LOAD 	sC," "			; character_space
+					COMPARE s5,0B
+					CALL 	Z,upFreq
+					COMPARE s5,0E
+					CALL 	Z,DownFreq ;These should reload LCD_data and sC with characters representing code of Freq, N3 etc
+					
+;					LOAD	  LCD_data,sB
+;					CALL      LCD_character_write		;then write 1st char to LCD
+;					LOAD	  LCD_data,sC
+;					CALL      LCD_character_write		;then write 2nd to LCD
+					
+					
+					COMPARE	 	s5,0D
+					CALL 		Z,UpdateFreqRegisters
+					
+					COMPARE		 s5,07
+					CALL 		Z,TurnOff
+					
+;and use DispAntennaInput for setting antenna input
+
+	 	 			COMPARE		s5,09		  ;Up+select
+					CALL 		Z,SetLoop
+					COMPARE		s5,0C	  	  ;Down+select
+					CALL 		Z,SetEarth
+					
+					RETURN
+					
+;Note key pad bits are: bit3 = On, bit 2 = up, bit 1 = select, bit 0 = down
+
+TurnOff:		    LOAD	  s0, 00  		    ;This is now used to drive PMOD1 which latches the device on!!
+					OUTPUT	  s0,LatchOn	 	;Latch On if 1
+					RETURN
+										
+					
+upFreq:				FETCH s0,Freq2Set
+					ADD	  s0,01
+					AND   s0,03
+					STORE s0,Freq2Set
+					JUMP  CheckWhichFreq
+
+DownFreq:			FETCH s0,Freq2Set
+					SUB	  s0,01
+					AND   s0,03
+					STORE s0,Freq2Set
+					JUMP  CheckWhichFreq
+					
+					
+					
+CheckWhichFreq:		COMPARE  	s0,00
+					CALL  		Z,ClearFreq				;clear set display
+					COMPARE		s0,01
+					CALL  		Z,SetHeyphoneFreq				;set Hy freq and return
+					COMPARE  	s0,02
+					CALL  		Z,SetN2Freq
+					COMPARE  	s0,03
+					CALL  		Z,SetN3_31Freq
+					LOAD 		LCD_data,sB
+					CALL      	LCD_character_write		;then write to LCD
+					LOAD 		LCD_data,sC
+					CALL      	LCD_character_write		;then write to LCD
+					
+					
+					RETURN     
+					
+ClearFreq:			LOAD	  sB," "		; character_space
+					LOAD	  sC," "		; character_space
+					
+					RETURN
+
+SetHeyphoneFreq:	LOAD	  s1,0e
+					STORE	  s1,TX_F_MSB
+					LOAD	  s1,80
+					STORE	  s1,TX_F_LSB
+					LOAD	  s1,75
+					STORE	  s1,RX_F_MSB
+					LOAD	  s1,55
+					STORE	  s1,RX_F_LSB
+					LOAD	  sB,"h"		; character_h
+					LOAD	  sC,"y"		; character_y
+					
+					RETURN
+
+SetN2Freq:			LOAD	  s1,0e
+					STORE	  s1,TX_F_MSB
+					LOAD	  s1,7e
+					STORE	  s1,TX_F_LSB
+					LOAD	  s1,75
+					STORE	  s1,RX_F_MSB
+					LOAD	  s1,46
+					STORE	  s1,RX_F_LSB
+					LOAD	  sB,"n"		; character_n
+					LOAD	  sC,"2"		; character_2
+					
+					RETURN
+
+SetN3_31Freq:		LOAD	  s1,05
+					STORE	  s1,TX_F_MSB
+					LOAD	  s1,2b
+					STORE	  s1,TX_F_LSB
+					LOAD	  s1,2a
+					STORE	  s1,RX_F_MSB
+					LOAD	  s1,ad
+					STORE	  s1,RX_F_LSB
+					LOAD	  sB,"n"		; character_n
+					LOAD	  sC,"3"		; character_3
+					
+					RETURN
+
+
+
+					
+UpdateFreqRegisters:	 LOAD	  cursor_position, C6	;position cursor
+                    CALL	  LCD_position_cursor
+
+					
+					LOAD      LCD_data, "f"				; character_f		 ;
+					CALL      LCD_character_write		;then write to LCD
+					LOAD      LCD_data, "="				; character_equals
+					CALL      LCD_character_write		;then write to LCD
+					
+					FETCH s0,Freq2Set
+					
+					CALL	  CheckWhichFreq
+					CALL	  SetTxFreq
+					CALL	  SetRxFreq
+
+					RETURN
+
+
+SetLoop:			LOAD	  s8,"l"		; character_l
+					LOAD	  s9,"o"		; character_o
+					LOAD	  sA,"o"		; character_o
+					
+					LOAD	  sB,"p"		; character_p
+					LOAD	  sC," "		; character_space
+					
+					JUMP DispAntennaInput
+					
+SetEarth:			LOAD	  s8,"e"		; character_e
+					LOAD	  s9,"a"		; character_a
+					LOAD	  sA,"r"		; character_r
+					
+					LOAD	  sB,"t"		; character_t
+					LOAD	  sC,"h"		; character_h
+				
+
+
+;To use
+DispAntennaInput: 	LOAD	  cursor_position,CB	;position cursor near end of second line
+                    CALL	  LCD_position_cursor
+					LOAD 	  LCD_data,s8
+					CALL      LCD_character_write		;then write to LCD
+					OUTPUT    s8, CmdToUser				;First letter is used to inform userpico whether loop or earth
+					LOAD 	  LCD_data,s9
+					CALL      LCD_character_write		;then write to LCD
+					LOAD 	  LCD_data,sA
+					CALL      LCD_character_write		;then write to LCD
+					LOAD  	  LCD_data,sB
+					CALL      LCD_character_write		;then write to LCD
+					LOAD      LCD_data,sC
+					CALL      LCD_character_write		;then write to LCD
+					
+					RETURN				
+
+
+
+;displays s5
+Displays5:			CALL	  Byte2Chars
+                    LOAD      LCD_data, s6		 ;
+					CALL      LCD_character_write		;then write to LCD
+					LOAD      LCD_data, s7		 ;
+					CALL      LCD_character_write		;then write to LCD
+					RETURN			
+
+
+;initialise scratchpad values for touch levels
+;GetTouchLevels:		  LOAD	  s0,00			  	;!!!!!!!!!!!!!! 1 for touch down, 0 for up - changed to up 23/6/11 only worry about touch down for the moment! (This is the touch nearest the middle of the lid)
+;					OUTPUT    s0,ChooseTouchKey	 ;Select which pad to read
+;					INPUT     s6,TouchSignal
+;					CALL	  delay_100ms
+;					INPUT	  s1,TouchSignal
+;					ADD		  s1,s6
+;					SRA		  s1   			;Devide by 2 taking ito account carry so average 2 values
+;					SUB		  s1,20			;set threshold at a lower value (assuming doesn't wrap around!!) -or add???????
+;					STORE	  s1,TouchDownLevel
+;					RETURN
+					
+
+
+
+;Get fifo command and act on it. Echo ascii value to LCD
+Respond2Fifo:		;CALL	LCD_cursor_back
+					
+					CALL	GetFifoChar
+					
+					COMPARE	s0,04		  ;character T (request for info from userpico) ->LESS TOP BIT WHICH IS NOT SENT!
+					CALL	Z,SendParamBack
+;					COMPARE	s0,03		  ;character S (request for info from userpico)
+;					CALL	Z,Select
+					COMPARE	s0,7F		  ;Is this the start of a signal readout (ie another 2 values expected) -LESS TOP BIT WHICH IS NOT SENT!
+					JUMP	Z,Display2   ; No revert to original!! ----move cursor and return
+					RETURN
+
+;Display character in s0
+;Display_s0:					LOAD	s5,s0		  			  ;!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!temporary to check beacon mode
+;					CALL	  Byte2Chars  			
+;		  			LOAD      LCD_data, s6		 ;This should display at the end of the line ie characters 12,13
+;					CALL      LCD_character_write		;then write to LCD
+;					LOAD      LCD_data, s7		 ;
+;					CALL      LCD_character_write		;then write to LCD
+					
+;					RETURN
+					
+
+Display8:			LOAD	  cursor_position, 07	;position cursor just after touch value
+                    CALL	  LCD_position_cursor
+                    
+                    CALL	  GetFifoChar
+					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
+					CALL      LCD_character_write		;then write to LCD
+					
+                    CALL	  GetFifoChar
+					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
+					CALL      LCD_character_write		;then write to LCD
+					
+                    CALL	  GetFifoChar
+					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
+					CALL      LCD_character_write		;then write to LCD
+					
+                    CALL	  GetFifoChar
+					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
+					CALL      LCD_character_write		;then write to LCD
+					
+                    CALL	  GetFifoChar
+					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
+					CALL      LCD_character_write		;then write to LCD
+					
+                    CALL	  GetFifoChar
+					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
+					CALL      LCD_character_write		;then write to LCD
+					
+                    CALL	  GetFifoChar
+					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
+					CALL      LCD_character_write		;then write to LCD
+					
+                    CALL	  GetFifoChar
+					LOAD      LCD_data, s0		 ; Write character from GetFfoChar
+					CALL      LCD_character_write		;then write to LCD
+					
+					
+					RETURN
+
+					
+;Set cursor position back to 7 and display 2 decimal values from fifo followed by locally available values
+Display2:			LOAD	  cursor_position, 07	;position cursor just after touch value
+                    CALL	  LCD_position_cursor
+                    CALL	GetFifoChar
+                    LOAD 	s5,s0
+                    CALL	GetChar	   			 ;Added this Sep 2014 to extend display of first digit
+;                    ADD       s0, 48              ; offset to Ascii code for '0'
+					LOAD      LCD_data, s5		 ; Write character from GetChar
+					CALL      LCD_character_write		;then write to LCD
+					CALL	GetFifoChar
+
+                    ADD       s0, 48'd            ; offset to Ascii code for '0'
+   					LOAD      LCD_data, s0		 ;
+					CALL      LCD_character_write		;then write to LCD
+
+; Added code to display ADC and demod peak values
+					
+					LOAD	  cursor_position, 10'd					;position cursor
+                    CALL	  LCD_position_cursor
+
+					INPUT	 	s5,ADCpeak
+					
+					CALL		 Displays5
+
+					LOAD      	LCD_data, " "			 ;character_space		 ;
+					CALL      	LCD_character_write		;then write to LCD
+					
+					
+					INPUT		 s5,DemodPeak				;will also reset the peak value
+					CALL		 Displays5
+					
+					
+					LOAD	  	cursor_position, C0	;position cursor
+                    CALL	  	LCD_position_cursor
+
+					INPUT	 	 s5,StartToneA					
+					CALL		 Displays5
+					INPUT		 s5,StartToneALong					
+					CALL		 Displays5
+					INPUT		 s5,StartToneB					
+					CALL		 Displays5
+					INPUT		 s5,StartToneBLong					
+					CALL		 Displays5
+					INPUT		 s5,StopToneA					
+					CALL		 Displays5
+					INPUT		 s5,StopToneALong					
+					CALL		 Displays5
+					INPUT		 s5,StopToneB					
+					CALL		 Displays5
+					INPUT		 s5,StopToneBLong					
+					CALL		 Displays5
+					
+					
+
+                    RETURN
+					
+
+;Enter with s0 - LSB, s1 - MSB
+SetTxFreq:	   	 	FETCH     s0, TX_F_MSB        ; store value for 86.95kHz
+                    OUTPUT    s0, TXFreqMSB
+
+                    FETCH     s0, TX_F_LSB
+                    OUTPUT    s0, TXFreqLSB       ; and send value to SSB modulator
+					RETURN
+
+SetRxFreq:	   	 	FETCH     s0, RX_F_MSB        ; store value for 86.95kHz
+                    OUTPUT    s0, RXFreqMSB
+
+                    FETCH     s0, RX_F_LSB
+                    OUTPUT    s0, RXFreqLSB       ; and send value to SSB modulator
+					RETURN
+
+
+
+
+;Select:			CALL	GetFifoChar
+;					OUT		s0,ChooseTouchKey
+;					RETURN
+					
+SendParamBack:		INPUT	s5,TouchSignal		   ;********************TEST reading touch***********************************
+					CALL	Export2User	
+					RETURN	
+
+; Routine to recover a character from the FIFO in s0
+GetFifoChar:        LOAD      s0, AckFIFO
+                    OUTPUT    s0, Controlbits
+                    LOAD      s0, AckFIFO	 ;Wait
+
+                    INPUT     s0, Command         ; now get my character
+                    AND       s0, 7F             ; mask of top bit
+                    RETURN       
+
+
+; Takes value in s5 and converts to 2 ascii codes which are sent to the user picoblaze.
+Export2User:        CALL      Byte2Chars
+                    OUTPUT    s6, CmdToUser
+                    OUTPUT    s7, CmdToUser
+                    LOAD      s0, 13'd	   	;terminate with CR
+                    OUTPUT    s0, CmdToUser
+                    LOAD      s0, 10'd	   	;and with LF
+                    OUTPUT    s0, CmdToUser
+                    RETURN
+
+
+; routine to look at command input and recover 2 characters and return the byte they represent in s5.
+Get2Chars:          INPUT     s6, Command
+                    COMPARE   s6, 128'd             ; if greater than 128, then no character
+                    JUMP      NC, Get2Chars
+                    CALL      GetFifoChar
+                    LOAD      s6, s0
+
+
+Get2ndChar:         INPUT     s7, Command
+                    COMPARE   s7, 128'd             ; if greater than 128, then no character
+                    JUMP      NC, Get2ndChar
+                    CALL      GetFifoChar
+                    LOAD      s7, s0
+
+                    JUMP      Chars2Byte
+
+
+
+
+; Routine to take ascii codes in s6 and s7 and return a byte in s5 given by this character representation
+Chars2Byte:         LOAD      s8, s6
+                    CALL      Get4bits
+                    LOAD      s5, s8
+                    SL0       s5
+                    SL0       s5
+                    SL0       s5
+                    SL0       s5                  ; put these 4 bits to MSBs
+                    LOAD      s8, s7
+                    CALL      Get4bits
+                    ADD       s5, s8
+                    RETURN       
+
+; This routine takes an ascii code in s8 and returns a 4 bit value in s8
+Get4bits:           COMPARE   s8, 60'd            ; if character is 0-9 it is less than 60, if it is A-F then it is greater than 60
+                    JUMP      C, char0_9
+                    SUB       s8, 55'd            ; assumes hex codes A-F are in capitals!!, A (code 65) gives 10...
+                    AND       s8, 0F              ; make sure only return 4 bits
+                    RETURN       
+
+char0_9:            SUB       s8, 48'd
+                    AND       s8, 0F              ; make sure only return 4 bits
+                    RETURN       
+
+
+; takes data in s5 and returns two ascii codes in s6,s7 (s7 is character for lower 4 bits)
+Byte2Chars:         LOAD      s8, s5              ; assumes 8 bit data is in s5
+
+                    SR0       s5
+                    SR0       s5
+                    SR0       s5
+                    SR0       s5                  ; get first hex character
+                    CALL      GetChar
+                    LOAD      s6, s5              ; first ascii char
+                    LOAD      s5, s8
+                    AND       s5, 0F
+                    CALL      GetChar             ; send to LCD or UART
+                    LOAD      s7, s5              ; second ascii char
+                    RETURN       
+
+; routine to convert 4bit value in s5 to an ascii code, returned in s5
+GetChar:            SUB       s5, 10'd            ; Test if s5 greater than 9
+                    JUMP      C, is_0_9           ; Hex character is 0_9
+                    ADD       s5, 65'd            ; offset for Ascii code 'A'
+                    RETURN       
+is_0_9:             ADD       s5, 10'd            ; return to range 0-9
+                    ADD       s5, 48'd            ; offset to Ascii code for '0'
+                    RETURN       
+
+
+
+; LCD driver routines courtesy Ken Chapman Xilinx.
+
+
+; Send space to the LCD display
+;
+;
+; Registers used LCD_data, LCD_control, s0 and s1.
+;
+LCD_space:          LOAD      LCD_data, " "			; character_space
+                    CALL      LCD_character_write
+                    RETURN
+;
+
+;
+; These are for a 20x4 character module
+;
+;
+; Initialise LCD display or clear LCD display
+;
+;
+; Registers used LCD_data, LCD_control, s0, s1, s2, s3, s4 and s5.
+;
+LCD_setup:          CALL      delay_1s            ; delay to allow LCD to be ready after power up
+                    LOAD      LCD_data, 56'd        ; function set, 8-bit, 2-line, 5x7 dot format
+                    CALL      LCD_control_write
+                    CALL      delay_1ms           ; wait >4.1ms
+                    CALL      delay_1ms
+                    CALL      delay_1ms
+                    CALL      delay_1ms
+                    CALL      delay_1ms
+                    CALL      LCD_control_write   ; repeat function set
+                    CALL      delay_1s            ; wait >100us
+                    CALL      LCD_control_write   ; repeat function set
+                    CALL      LCD_control_write   ; repeat function set
+                    LOAD      LCD_data, 6'd       ; Entry mode, increment by 1, no shift
+                    CALL      LCD_control_write
+                    LOAD      LCD_data, 14'd      ; Display, on, cursur on, no blink cursor
+                    CALL      LCD_control_write
+LCD_clear:          LOAD      LCD_data, 1'd       ; clear display
+                    CALL      LCD_control_write
+                    CALL      delay_1ms           ; wait >1.64ms
+                    CALL      delay_1ms
+                    CALL      delay_1ms
+                    
+                    LOAD	  s0,40					; hex
+                    OUTPUT	  s0,LCDcontrast	  	;*************************set default contrast
+                    
+                    RETURN
+;
+
+
+; Send cursor to ‘home’
+LCD_home:           LOAD      LCD_data, 02
+                    CALL      LCD_control_write
+                    CALL      delay_1ms
+; CALL      delay_1ms
+                    RETURN
+;
+
+; Turn Back-light on (assuming bit 3 of the control port is connected to the LCD
+; backlight), uses LCD_control.
+LCD_light_on:       OR        LCD_control, 08
+                    OUTPUT    LCD_control, LCD_control_port
+                    RETURN
+;
+
+; Turn Back-light off (assuming bit 3 of the control port is connected to the LCD
+; backlight), uses LCD_control.
+LCD_light_off:      AND       LCD_control, 07
+                    OUTPUT    LCD_control, LCD_control_port
+                    RETURN
+;
+
+
+; Move cursor to start of line 2
+; Uses LCD_data, LCD_control, s0 and s1.
+LCD_line_2:         LOAD      LCD_data, C0
+                    CALL      LCD_control_write
+                    CALL      delay_1ms
+                    RETURN
+;
+
+
+
+; Advance cursur right
+; Uses LCD_data, LCD_control, s0 and s1.
+LCD_cursor_advance: LOAD      LCD_data, 14'd
+                    CALL      LCD_control_write
+                    CALL      delay_1ms
+                    RETURN
+;
+
+; Moves cursur left (back one)
+; Uses LCD_data, LCD_control, s0 and s1.
+LCD_cursor_back:    LOAD      LCD_data, 10'd
+                    CALL      LCD_control_write
+                    CALL      delay_1ms
+                    RETURN
+;
+
+
+
+
+
+
+; Set cursor on LCD display based on value in register 'cursor_position'
+;
+; There are 20 character positions with the following addresses on the first line
+; position         1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
+; cursor_position 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13
+; address         80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f 90 91 92 93
+; line 2 address	  c0 c1 c2 .....
+; other lines have other values…..
+; Writing characters auto increments the address, but note that
+;
+;
+; Registers used cursor_position, LCD_data, LCD_control, s0 and s1.
+; Horinzontal position in lower 4-5 bits, line in bit 6
+LCD_position_cursor: OR       cursor_position, 80; set  MSB to address LCD memmory
+                    LOAD      LCD_data, cursor_position
+                    CALL      LCD_control_write   ; write address to LCD control
+                    RETURN
+;
+
+
+
+
+; Write to LCD with control data provided in register called LCD_data
+; Registers used LCD_data, LCD_control, s0 and s1.
+;
+LCD_control_write:  OUTPUT    LCD_data, LCD_data_port; output data
+                    AND       LCD_control, 04      ; R/W=0,  RS=0
+                    CALL      LCD_enable_pulse    ; enable pulse
+                    RETURN
+;
+; Write to LCD with character data provided in register called LCD_data
+;
+; Registers used LCD_data, LCD_control, s0 and s1.
+;
+LCD_character_write: OUTPUT   LCD_data, LCD_data_port; output data
+                    OR        LCD_control, 01      ; R/W=0,  RS=1
+                    CALL      LCD_enable_pulse    ; enable pulse
+                    RETURN
+;
+; Registers used LCD_control, s0 and s1.
+;
+LCD_enable_pulse:   OR        LCD_control, LCD_E  ; set enable bit (E=1)
+                    OUTPUT    LCD_control, LCD_control_port
+                    CALL      delay_1us           ; ensure E pulse width > 230ns
+                    XOR       LCD_control, LCD_E  ; reset enable bit (E=0)
+                    OUTPUT    LCD_control, LCD_control_port;
+                    CALL      delay_50us          ; >40us delay
+                    RETURN
+;
+
+
+; Registers used s0, s1, s2, s3, s4 and s5.
+; 
+delay_1s:           LOAD      s5, 00               ; clear cycle counter
+                    LOAD      s4, 00
+wait_1s:            CALL      delay_1ms
+                    ADD       s4, 01               ; increment cycle counter
+                    ADDCY     s5, 00
+                    COMPARE   s4, count_1000_lsb  ; test for 1000ms
+                    JUMP      NZ, wait_1s
+                    COMPARE   s5, count_1000_msb
+                    JUMP      NZ, wait_1s
+                    RETURN       
+; 
+; Delays of approximately 200ms and 300ms used for LCD display scrolling
+; 
+; 
+; Registers used s0, s1, s2, s3 and s4.
+; 
+delay_300ms:        CALL      delay_100ms
+delay_200ms:        CALL      delay_100ms
+                    CALL      delay_100ms
+                    RETURN      
+; 
+; Delay of approximately 100ms used for switch debounce
+; 
+; Registers used s0, s1, s2, s3 and s4.
+; 
+delay_100ms:        LOAD      s4, 64             ; repeat 1ms delay 100 times
+wait_100ms:         CALL      delay_1ms
+                    SUB       s4, 01
+                    JUMP      NZ, wait_100ms
+                    RETURN       
+; 
+; Delay of approximately 1ms required by LCD display
+; 
+; Registers used s0, s1, s2 and s3.
+; 
+delay_1ms:          LOAD      s3, 00               ; clear cycle counter
+                    LOAD      s2, 00
+wait_1ms:           CALL      delay_1us
+                    ADD       s2, 01               ; increment cycle counter
+                    ADDCY     s3, 00
+                    COMPARE   s2, count_1000_lsb  ; test for 1000us
+                    JUMP      NZ, wait_1ms
+                    COMPARE   s3, count_1000_msb
+                    JUMP      NZ, wait_1ms
+                    RETURN       
+; 
+; Delay of approximately 50us required by LCD display
+; 
+; Registers used s0 and s1.
+; 
+delay_50us:         LOAD      s1, 50'd              ; repeat 1us delay 50 times
+wait_50us:          CALL      delay_1us
+                    SUB       s1, 01
+                    JUMP      NZ, wait_50us
+                    RETURN       
+
+; Delay of approximately 1us used to provide timing reference for
+; LCD operations. This must be adjusted to reflect the clock
+; applied to KCPSM3. The provided code is for a 50MHz clock rate.
+; 
+; The software delay loop is formed using register s0. This register
+; must be loaded with an integer value close to the result of....
+; 
+; value =  (clock_rate - 4)/4          Where 'clock_rate' is in MHz
+; 
+; So for a 50MHz clock the value is (50-4)/4 = 11.5 and 12 would be used.
+; For clock rates below 8MHz the value of 1 must be used and the I2C bus
+; operation will become lower than the 100KHz target intended.
+; 
+; Register used s0.
+; 
+
+delay_1us:          LOAD      s0, delay_1us_constant; delay value of 12 decimal for a 50MHz clock
+wait_1us:           SUB       s0, 01
+                    JUMP      NZ, wait_1us
+                    RETURN       
+; 
+

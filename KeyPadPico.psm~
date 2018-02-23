@@ -1,0 +1,709 @@
+;Modified for 49.162MHz clock
+;A0 is version to get start and stop tone levels for speaker switching.
+;
+;99 - add latch on button facility so don't need handset plugged in.
+;Now display signal level and gain setting
+;Switch off key pad oscillation and
+;Mod to read key pad and display
+;Version using CoutA
+;Need to mod to send TX request to User when touchdown active
+
+;May 10
+; 
+; KeyPad routine for SSB picoblaze
+;
+
+
+
+CONSTANT    delay_1us_constant,       06                  ; Value (13)19 or 12? decimal suitable for 50MHz clock – about 6 for 33MHz?
+CONSTANT	count_1000_lsb,				E8                 	; hex lower 8-bits of 1000 count value
+CONSTANT	count_1000_msb,				03                  ; hex upper 8-bits of 1000 count value
+
+
+
+; Input port - port numbering changed June 11
+CONSTANT	Command,				0'd                   ; From main pico
+CONSTANT	PTT,			1'd					  ;This is PTT and default frequency in bits 1 and 2
+CONSTANT	RAMdataInLSB,			2'd
+CONSTANT	RAMdataInMSB,			3'd
+CONSTANT	KP2userbufferFull,		4'd					  ;Bit 0 KP2User buffer full, Bit 1 Touch counter running
+CONSTANT	TouchSignal2,			5'd					  ;This is keypad Bit 0 On, Bit 1 Select, Bit 2 Down, Bit 3 Up
+;TouchSignal2=0E is On, 0D = Select, 0B = Down, 07= Up
+CONSTANT	ADCpeak,				6'd
+CONSTANT	DemodPeak,				7'd
+;CONSTANT	SignalLevel,			8'd
+CONSTANT	StartToneA,				8'd
+CONSTANT	StartToneALong,			9'd
+CONSTANT	StartToneB,				10'd
+CONSTANT	StartToneBLong,			11'd
+CONSTANT	StopToneA,				12'd
+CONSTANT	StopToneALong,			13'd
+CONSTANT	StopToneB,				14'd
+CONSTANT	StopToneBLong,			15'd
+
+
+; Output ports
+CONSTANT	CmdToUser,				0'd
+CONSTANT	LCD_data_port,			1'd
+CONSTANT	LCD_control_port,		2'd
+CONSTANT	LCDcontrast,			3'd
+CONSTANT	Data2ArchiveMSB,		4'd
+CONSTANT	Data2ArchiveLSB,		5'd
+CONSTANT	Controlbits,			6'd
+;Bit offsets:
+CONSTANT	AckFIFO,				32'd                  ; 		bit 5 Acknowledge FIFO (present character)
+
+CONSTANT	RAM_ADD_MSB,			7'd				  ;Bits 0 and 1 top too address bits, bit 2 write RAM
+;Bit offsets:
+CONSTANT	WriteKPRAM,				4'd
+
+CONSTANT	RAM_ADD_LSB,			8'd
+CONSTANT	LatchOn,				9'd
+CONSTANT	RXFreqMSB,				10'd                  ; 7546 for 87.956kHz ie 86.956kHz carrier and allow range up to 154kHz 7555 Heyphone
+CONSTANT	RXFreqLSB,				11'd
+
+CONSTANT	TXFreqMSB,				12'd                  ; 3710  with 49.152MHz clock, with 49.162MHz - need 3709 for N2 and 3711 for Heyphone
+CONSTANT	TXFreqLSB,				13'd
+
+;TX frequencies:
+;For 49.152MHz!
+;Heyphone - 0e80
+;N2 -       0e7e
+;N3_31 -    052b
+
+;RX frequencies:
+;Heyphone  - $7555
+;N2  -       $7546
+;N3_31  -    $2aad
+
+;But for 49.162MHz:
+;Heyphone - 0e7F
+;N2 -       0e7d
+;N3_31 -    052a
+
+;RX frequencies:
+;Heyphone  - $754F
+;N2  -       $753E
+;N3_31  -    $2953
+
+
+
+
+; Scratchpad registers
+CONSTANT	TouchUpLevel,			0'd
+CONSTANT	TouchDownLevel,			1'd
+CONSTANT	TouchSelectLevel,		2'd
+CONSTANT	TX_F_MSB,				3'd
+CONSTANT	TX_F_LSB,				4'd
+CONSTANT	RX_F_MSB,				5'd
+CONSTANT	RX_F_LSB,				6'd
+CONSTANT	Freq2Set,				7'd		 ; values 0 nothing to set, 1>Hy, 2>N2, 3>N3 (31kHz)
+
+
+CONSTANT	PreviousKeyState,		10		; 16d
+CONSTANT	PreviousPTTState,		11		; 17d
+CONSTANT    KEYS_PRESSED,           12      ; 18d
+CONSTANT    KeyPressTimer,			13      ; 19d
+CONSTANT    KeyPressFast,			14      ; 20d
+CONSTANT    KeyPressFastLeadIn,		15      ; 20d
+
+
+
+;;;GenerateCode        MEM       "KeyPadProg.mem"
+
+
+
+ cold_start:      
+					
+welcome_message:    
+                    
+initialise:			LOAD	  s0,00				 ;This is now used to drive LatchOn which latches the device on!!
+					OUTPUT    s0,LatchOn	 ;Latch On if 1
+					
+					STORE     s0, PreviousKeyState	; initial state
+					STORE     s0, PreviousPTTState	; initial state
+					STORE	  s0, KEYS_PRESSED
+					STORE	  s0, KeyPressTimer
+					STORE	  s0, KeyPressFast
+
+
+					CALL	  delay_1s		 	;Wait so it doesn't detect as turn off
+
+
+					;LOAD      s5, "&"			; key event flag
+					;OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					
+					;FETCH	  s5, KEYS_PRESSED	; get the keys pressed mask
+					;ADD  	  s5, "P"			; convert to appropriate character for key on
+					;OUTPUT    s5, CmdToUser		; write to user pico and onto ARM		
+
+					
+;set values for Hey by default
+					LOAD      s5, "&"			; key event flag
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					LOAD      s5, "z"			; key event flag
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+
+					INPUT	  s0,PTT 	;This is PTT but also has set default frequency bits in bits 1 and 2
+		    	 		SR0	s0
+					AND	s0,03		
+		;			LOAD   	s0,01		 ;use 1 for Hey, 2 for N2 freq, 3 for 37kHz
+	 				STORE 	s0,Freq2Set
+					CALL	UpdateFreqRegisters
+
+;Wait and check if ON still pressed						
+	  	  		    CALL	  delay_1s
+					INPUT	 s5,TouchSignal2
+					AND 	s5,0F
+
+					COMPARE	  s5,0E			;is 'ON' pressed
+					JUMP	  NZ,loop			;if not ON button, skip
+					LOAD	  s0,01				 ;This is now used to drive PMOD1 which latches the device on!!
+					OUTPUT	  s0,LatchOn	 ;Latch On
+					
+					CALL	  delay_1s		 	;Wait so it doesn't detect as turn off!
+					CALL	  delay_1s		 	;Wait so it doesn't detect as turn off!
+					
+					
+loop:
+
+					CALL	  delay_50msecs			; period between checks
+					;CALL	  delay_1s		 	;Wait so it doesn't detect as turn off!
+
+					INPUT     s0, Command		  ;Check if FIFO character present
+                    COMPARE   s0, 128'd           ; is there a character?
+                    CALL      C, Respond2Fifo	  ;this should now receive value of mode from user pico and display on LCD
+                    
+                    INPUT	  s1,TouchSignal2		; read the keys touched register
+					
+					XOR		  s1, FF				; invert so ON is a 1
+                    AND 	  s1,0F					; mask to the key press bits
+					
+					
+					;LOAD      s5, "&"			; key event flag
+					;OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					
+					;LOAD      s5, s1
+					;ADD  	  s5, "@"			; convert to appropriate character for key on
+					;ADD  	  s5, 60			; temp should get a through h
+					;OUTPUT    s5, CmdToUser		; write to user pico and onto ARM		
+
+					
+					
+					;JUMP      CheckPTT
+					
+					
+					
+					
+					FETCH	  s5, PreviousKeyState	; get last key pressed state					
+					COMPARE   s1, s5
+					
+					;JUMP      Z, CheckPTT      ; skip if input state not changed
+					JUMP      Z, KeyNotChanged      ; skip if input state not changed
+
+                    STORE     s1, PreviousKeyState	; remember new state
+					
+					FETCH	  s5, KEYS_PRESSED	; get the keys pressed mask
+					OR        s5, s1            ; remember which keys have been pressed
+					STORE     s5, KEYS_PRESSED	; remember new state
+					
+					COMPARE   s1, 00                ; are there any keys pressed now?
+					JUMP      nz, KeyNotChanged     ; skip if keys still pressed
+					;JUMP      nz, CheckPTT          ; skip if keys still pressed
+					
+					LOAD      s5, "&"			; key event flag
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					
+					FETCH	  s5, KEYS_PRESSED	; get the keys pressed mask
+					ADD  	  s5, "@"			; convert to appropriate character
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM		
+
+					
+					;#define KEY_UP		'H'		// up = 08	
+					;#define KEY_DOWN	'D'		// down = 04	
+					;#define KEY_RIGHT	'B'		// right = 02
+					;#define KEY_LEFT	'A'		// left = 01
+
+					;#define KEY_UPLEFT 'I'		// 08 + 01	
+
+					;#define KEY_PTT_ON		'0'
+					;#define KEY_PTT_OFF	'1'
+
+					LOAD		s0, 00				; reset the keys pressed
+					STORE	  s0, KEYS_PRESSED
+					STORE	  s0, KeyPressTimer
+					STORE	  s0, KeyPressFast
+					STORE	  s0, KeyPressFastLeadIn
+
+					
+					JUMP		CheckPTT
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+KeyNotChanged:
+
+					;;; check for key pressed for a period and tell ARM if so
+				
+					FETCH	  s1, KEYS_PRESSED	; get the keys pressed mask
+					COMPARE   s1, 00             ; any keys pressed
+					JUMP      Z, CheckPTT       ; if not then do not time
+					
+					FETCH     s2, KeyPressFast  ; has key been pressed a while?
+					COMPARE   s2, 00             ;
+					JUMP      z, SlowPress      ; skip if slow presses
+					
+FastPress:
+					FETCH		s2, KeyPressTimer
+					ADD			s2, 01			; increment by approx loop time (50 milli sec?)
+					STORE		s2, KeyPressTimer
+					AND         s2, 07			; if key pressed for .3 secs approx (32 ticks)
+					JUMP        nz, CheckPTT    ; if not then no message
+					
+					JUMP        SlowPressSend
+					
+SlowPress:
+					FETCH		s2, KeyPressTimer
+					ADD			s2, 01			; increment by approx loop time (50 milli sec?)
+					STORE		s2, KeyPressTimer
+					AND         s2, 0F			; if key pressed for 1.5 secs approx (32 ticks)
+					
+					JUMP        nz, CheckPTT    ; if not then no message
+					
+SlowPressSend:
+					LOAD      s5, "&"			; key event flag
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					
+					FETCH	  s5, KEYS_PRESSED	; get the keys pressed mask
+					ADD  	  s5, "P"			; convert to appropriate character for key on
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM		
+
+					FETCH		s2, KeyPressFastLeadIn
+					ADD			s2, 01			; increment by approx loop time (50 milli sec?)
+					STORE		s2, KeyPressFastLeadIn
+					
+					COMPARE     s2, 04           ; approx 2 seconds?
+					JUMP        NZ, CheckPTT    ; keep slow presses till then
+					
+					STORE		s2, KeyPressFast    ; start fast key press
+					
+
+					;;; now check PTT
+CheckPTT:
+                    INPUT	  s1,PTT 	;Read PTT register
+					AND		  s1,01		;Mask lowest bit
+					
+					FETCH     s5, PreviousPTTState
+					COMPARE   s1, s5        ; has it changed
+					
+					JUMP	Z, loop			; loop back if not
+
+					STORE     s1, PreviousPTTState
+					
+					; send PTT state - 
+					;		0 = PTT pressed   1 = PTT released
+					
+					LOAD	  s5, "&"
+					OUTPUT    s5, CmdToUser
+					ADD		  s1, "0"		; PTT pressed = '0'; PTT released = '1'
+					OUTPUT    s1, CmdToUser
+					
+					;COMPARE    s1, 00 ; debug
+					;JUMP       Z, PTTOFF ; debug
+					
+					
+					; debug 					LOAD	  s5, "r"
+					; debug 					OUTPUT    s5, CmdToUser
+					
+					
+                    JUMP	  loop
+;PTTOFF:
+					; debug 					LOAD	  s5, "t"
+					; debug 					OUTPUT    s5, CmdToUser
+					
+					
+ ;                   JUMP	  loop
+
+					CALL	  delay_1s
+					INPUT	 s5,TouchSignal2
+					AND 	s5,0F
+
+					COMPARE	  s5,0F			;not $F if pressed
+                    RETURN	  Z				;return if key not still pressed
+                    
+
+					CALL 		Z,TurnOff
+					
+
+					
+;Note key pad bits are: bit3 = On, bit 2 = up, bit 1 = select, bit 0 = down
+
+TurnOff:		    LOAD	  s0, 00  		    ;This is now used to drive PMOD1 which latches the device on!!
+					OUTPUT	  s0,LatchOn	 	;Latch On if 1
+					RETURN
+										
+					
+upFreq:				FETCH s0,Freq2Set
+					ADD	  s0,01
+					AND   s0,03
+					STORE s0,Freq2Set
+					JUMP  CheckWhichFreq
+
+DownFreq:			FETCH s0,Freq2Set
+					SUB	  s0,01
+					AND   s0,03
+					STORE s0,Freq2Set
+					JUMP  CheckWhichFreq
+					
+					
+					
+CheckWhichFreq:				COMPARE  	s0,00
+					CALL  		Z,ClearFreq				;clear set display
+					COMPARE		s0,01
+					CALL  		Z,SetHeyphoneFreq				;set Hy freq and return
+					COMPARE  	s0,02
+					CALL  		Z,SetN2Freq
+					COMPARE  	s0,03
+					CALL  		Z,SetN3_31Freq
+
+					
+					
+					RETURN     
+					
+ClearFreq:			LOAD	  sB," "		; character_space
+					LOAD	  sC," "		; character_space
+					
+					RETURN
+
+
+;TX frequencies:
+;for 49.162MHz!:
+;Heyphone - 0e7F
+;N2 -       0e7d
+;N3_31 -    052a
+
+;RX frequencies:
+;Heyphone  - $754F
+;N2  -       $753E
+;N3_31  -    $2953
+
+
+
+; with 49.162MHzMHz!
+SetHeyphoneFreq:	                LOAD	  s1,0e
+					STORE	  s1,TX_F_MSB
+					LOAD	  s1,7F
+					STORE	  s1,TX_F_LSB
+					LOAD	  s1,75
+					STORE	  s1,RX_F_MSB
+					LOAD	  s1,4F
+					STORE	  s1,RX_F_LSB
+					;LOAD	  sB,"h"		; character_h
+					;LOAD	  sC,"y"		; character_y
+					
+					LOAD      s5, "&"			; key event flag
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					LOAD      s5, "w"			; key event flag
+					OUTPUT    s5, CmdToUser		; write to user pico and onto ARM
+					
+					RETURN
+					
+
+;For N3 5565 (15BD) TX and  45032 (AFE8) RX with 32.768MHz!
+SetN2Freq:			        LOAD	  s1,0e
+					STORE	  s1,TX_F_MSB
+					LOAD	  s1,7d
+					STORE	  s1,TX_F_LSB
+					LOAD	  s1,75
+					STORE	  s1,RX_F_MSB
+					LOAD	  s1,3E
+					STORE	  s1,RX_F_LSB
+					LOAD	  sB,"n"		; character_n
+					LOAD	  sC,"2"		; character_2
+					
+					RETURN
+
+;For 31kH 1984 TX (07C0)    16384 for RX (4000 hex) with 32.768MHz!
+SetN3_31Freq:		                LOAD	  s1,05
+					STORE	  s1,TX_F_MSB
+					LOAD	  s1,2a
+					STORE	  s1,TX_F_LSB
+					LOAD	  s1,29
+					STORE	  s1,RX_F_MSB
+					LOAD	  s1,53
+					STORE	  s1,RX_F_LSB
+					LOAD	  sB,"3"		; character_3
+					LOAD	  sC,"1"		; character_1
+					
+					RETURN
+
+
+
+					
+UpdateFreqRegisters:			
+
+					CALL  		SetHeyphoneFreq				;set Hy freq and return
+					
+					;FETCH s0,Freq2Set
+					
+					;CALL	  CheckWhichFreq
+
+					CALL	  SetTxFreq
+					CALL	  SetRxFreq
+
+					RETURN
+
+
+
+	
+
+
+
+;Get fifo command and act on it. Echo ascii value to LCD
+Respond2Fifo:				;CALL	LCD_cursor_back
+					CALL	GetFifoChar
+
+Respond2FifoW:
+					INPUT     s0, Command		  ;Check if FIFO character present
+                    COMPARE   s0, 128'd           ; is there a character?
+                    JUMP      NC, Respond2FifoW	  ;this should now receive value of mode from user pico and display on LCD
+
+					
+					CALL	GetFifoChar
+					
+					COMPARE	s0, "Z"		  ; Z = turn off					
+					CALL 		Z,TurnOff
+
+					COMPARE	s0, "y"		  ; y - turn on LCD					
+					CALL 		Z,TurnLCDOn
+
+					COMPARE	s0, "Y"		  ; Y - turn off LCD					
+					CALL 		Z,TurnLCDOff
+
+					
+					COMPARE	s0,04		  ;character T (request for info from userpico) ->LESS TOP BIT WHICH IS NOT SENT!
+					CALL	Z,SendParamBack
+
+					RETURN
+
+TurnLCDOn:
+					LOAD	s0, 01
+					OUTPUT	s0, LCDcontrast	 	;
+
+					RETURN
+					
+TurnLCDOff:
+					LOAD	s0, 00
+					OUTPUT	s0, LCDcontrast	 	;
+
+					RETURN
+					
+					
+; Added code to display ADC and demod peak values
+					
+
+
+                    RETURN
+					
+
+;Enter with s0 - LSB, s1 - MSB
+SetTxFreq:	   	 	FETCH     s0, TX_F_MSB        ; Value for TX frequency being used
+                    OUTPUT    s0, TXFreqMSB
+
+                    FETCH     s0, TX_F_LSB
+                    OUTPUT    s0, TXFreqLSB       ; and send value to SSB modulator
+					RETURN
+
+SetRxFreq:	   	 	FETCH     s0, RX_F_MSB        ; Value for RX frequency being used
+                    OUTPUT    s0, RXFreqMSB
+
+                    FETCH     s0, RX_F_LSB
+                    OUTPUT    s0, RXFreqLSB       ; and send value to SSB demodulator
+					RETURN
+
+
+
+
+;Select:			CALL	GetFifoChar
+;					OUT		s0,ChooseTouchKey
+;					RETURN
+					
+SendParamBack:		INPUT	s5,PTT		   ;********************TEST reading touch***********************************
+					CALL	Export2User	
+					RETURN	
+
+; Routine to recover a character from the FIFO in s0
+GetFifoChar:        LOAD      s0, AckFIFO
+                    OUTPUT    s0, Controlbits
+                    LOAD      s0, AckFIFO	 ;Wait
+
+                    INPUT     s0, Command         ; now get my character
+                    AND       s0, 7F             ; mask of top bit
+                    RETURN       
+
+
+; Takes value in s5 and converts to 2 ascii codes which are sent to the user picoblaze.
+Export2User:        CALL      Byte2Chars
+                    OUTPUT    s6, CmdToUser
+                    OUTPUT    s7, CmdToUser
+                    LOAD      s0, 13'd	   	;terminate with CR
+                    OUTPUT    s0, CmdToUser
+                    LOAD      s0, 10'd	   	;and with LF
+                    OUTPUT    s0, CmdToUser
+                    RETURN
+
+
+; routine to look at command input and recover 2 characters and return the byte they represent in s5.
+Get2Chars:          INPUT     s6, Command
+                    COMPARE   s6, 128'd             ; if greater than 128, then no character
+                    JUMP      NC, Get2Chars
+                    CALL      GetFifoChar
+                    LOAD      s6, s0
+
+
+Get2ndChar:         INPUT     s7, Command
+                    COMPARE   s7, 128'd             ; if greater than 128, then no character
+                    JUMP      NC, Get2ndChar
+                    CALL      GetFifoChar
+                    LOAD      s7, s0
+
+                    JUMP      Chars2Byte
+
+
+
+
+; Routine to take ascii codes in s6 and s7 and return a byte in s5 given by this character representation
+Chars2Byte:         LOAD      s8, s6
+                    CALL      Get4bits
+                    LOAD      s5, s8
+                    SL0       s5
+                    SL0       s5
+                    SL0       s5
+                    SL0       s5                  ; put these 4 bits to MSBs
+                    LOAD      s8, s7
+                    CALL      Get4bits
+                    ADD       s5, s8
+                    RETURN       
+
+; This routine takes an ascii code in s8 and returns a 4 bit value in s8
+Get4bits:           COMPARE   s8, 60'd            ; if character is 0-9 it is less than 60, if it is A-F then it is greater than 60
+                    JUMP      C, char0_9
+                    SUB       s8, 55'd            ; assumes hex codes A-F are in capitals!!, A (code 65) gives 10...
+                    AND       s8, 0F              ; make sure only return 4 bits
+                    RETURN       
+
+char0_9:            SUB       s8, 48'd
+                    AND       s8, 0F              ; make sure only return 4 bits
+                    RETURN       
+
+
+; takes data in s5 and returns two ascii codes in s6,s7 (s7 is character for lower 4 bits)
+Byte2Chars:         LOAD      s8, s5              ; assumes 8 bit data is in s5
+
+                    SR0       s5
+                    SR0       s5
+                    SR0       s5
+                    SR0       s5                  ; get first hex character
+                    CALL      GetChar
+                    LOAD      s6, s5              ; first ascii char
+                    LOAD      s5, s8
+                    AND       s5, 0F
+                    CALL      GetChar             ; send to LCD or UART
+                    LOAD      s7, s5              ; second ascii char
+                    RETURN       
+
+; routine to convert 4bit value in s5 to an ascii code, returned in s5
+GetChar:            SUB       s5, 10'd            ; Test if s5 greater than 9
+                    JUMP      C, is_0_9           ; Hex character is 0_9
+                    ADD       s5, 65'd            ; offset for Ascii code 'A'
+                    RETURN       
+is_0_9:             ADD       s5, 10'd            ; return to range 0-9
+                    ADD       s5, 48'd            ; offset to Ascii code for '0'
+                    RETURN       
+
+
+
+
+; Registers used s0, s1, s2, s3, s4 and s5.
+; 
+delay_1s:           LOAD      s5, 00               ; clear cycle counter
+                    LOAD      s4, 00
+wait_1s:            CALL      delay_1ms
+                    ADD       s4, 01               ; increment cycle counter
+                    ADDCY     s5, 00
+                    COMPARE   s4, count_1000_lsb  ; test for 1000ms
+                    JUMP      NZ, wait_1s
+                    COMPARE   s5, count_1000_msb
+                    JUMP      NZ, wait_1s
+                    RETURN       
+; 
+; Delays of approximately 200ms and 300ms used for LCD display scrolling
+; 
+; 
+; Registers used s0, s1, s2, s3 and s4.
+; 
+delay_300ms:        CALL      delay_100ms
+delay_200ms:        CALL      delay_100ms
+                    CALL      delay_100ms
+                    RETURN      
+; 
+; Delay of approximately 100ms used for switch debounce
+; 
+; Registers used s0, s1, s2, s3 and s4.
+; 
+delay_50msecs:      LOAD      s4, 32             ; repeat 1ms delay 100 times
+					JUMP      wait_100ms
+delay_100ms:        LOAD      s4, 64             ; repeat 1ms delay 100 times
+wait_100ms:         CALL      delay_1ms
+                    SUB       s4, 01
+                    JUMP      NZ, wait_100ms
+                    RETURN 
+
+
+; 
+; Delay of approximately 1ms required by LCD display
+; 
+; Registers used s0, s1, s2 and s3.
+; 
+delay_1ms:          LOAD      s3, 00               ; clear cycle counter
+                    LOAD      s2, 00
+wait_1ms:           CALL      delay_1us
+                    ADD       s2, 01               ; increment cycle counter
+                    ADDCY     s3, 00
+                    COMPARE   s2, count_1000_lsb  ; test for 1000us
+                    JUMP      NZ, wait_1ms
+                    COMPARE   s3, count_1000_msb
+                    JUMP      NZ, wait_1ms
+                    RETURN       
+; 
+; Delay of approximately 50us required by LCD display
+; 
+; Registers used s0 and s1.
+; 
+delay_50us:         LOAD      s1, 50'd              ; repeat 1us delay 50 times
+wait_50us:          CALL      delay_1us
+                    SUB       s1, 01
+                    JUMP      NZ, wait_50us
+                    RETURN       
+
+; Delay of approximately 1us used to provide timing reference for
+; LCD operations. This must be adjusted to reflect the clock
+; applied to KCPSM3. The provided code is for a 50MHz clock rate.
+; 
+; The software delay loop is formed using register s0. This register
+; must be loaded with an integer value close to the result of....
+; 
+; value =  (clock_rate - 4)/4          Where 'clock_rate' is in MHz
+; 
+; So for a 50MHz clock the value is (50-4)/4 = 11.5 and 12 would be used.
+; For clock rates below 8MHz the value of 1 must be used and the I2C bus
+; operation will become lower than the 100KHz target intended.
+; 
+; Register used s0.
+; 
+
+delay_1us:          LOAD      s0, delay_1us_constant; delay value of 12 decimal for a 50MHz clock
+wait_1us:           SUB       s0, 01
+                    JUMP      NZ, wait_1us
+                    RETURN       
+; 
+

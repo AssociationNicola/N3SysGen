@@ -1,0 +1,19 @@
+--------------------------------- Version Log ----------------------------------
+Version                                 Path
+System Generator 2014.4                 /opt/Xilinx/Vivado/2014.4
+Matlab 8.4.0.150421 (R2014b)            /usr/local/MATLAB/R2014b
+Vivado 2014.4                           /opt/Xilinx/Vivado/2014.4
+--------------------------------------------------------------------------------
+Summary of Errors:
+Error 0001: Undriven input port
+     Block: 'N3_TE0722_test/Logical3'
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'N3_TE0722_test/Logical3'
+
+Details:
+The input ports on this block must be driven by other Xilinx blocks
+--------------------------------------------------------------------------------

@@ -1,0 +1,16 @@
+Mods to Pico
+Move to KCPSM6 - done
+move to 4kblock RAM and change all address bus widths - done
+
+Remove flash interface (use block RAM) - done
+
+Mods to Uart
+
+move to Uart6 - done
+
+Change clocks to run at 32.768MHz:
+ADC clock - done
+UART clock - done
+Key Pad Assembler TX RX constants adjust! -done
+
+Need to fix where the clock comes from (via PS)

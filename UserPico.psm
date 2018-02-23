@@ -2125,6 +2125,7 @@ CheckUartRx:        INPUT        s0, Uart_status     ; Check if there is RX data
 
 
 ; send character in s6 to Uart - also uses s8!
+;This doesn't actually use a UART, it communicates to the PS via a FIFO.
 Send2UartTX:        INPUT        s8, Uart_status     ; Check if TX buffer is full
                     AND       s8, 02
                     COMPARE      s8, 02               ; if 2 then wait

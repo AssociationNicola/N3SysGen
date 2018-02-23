@@ -1,0 +1,21 @@
+#
+# An unexpected error has occurred (11)
+#
+Stack:
+/lib/x86_64-linux-gnu/libc.so.6(+0x36d40) [0x7f0adef5bd40]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/librdi_common.so(std::_Hashtable<hdi::tcltasks::detail::collection_wrapper_base const*, std::pair<hdi::tcltasks::detail::collection_wrapper_base const* const, Tcl_Obj*>, std::allocator<std::pair<hdi::tcltasks::detail::collection_wrapper_base const* const, Tcl_Obj*> >, std::__detail::_Select1st, std::equal_to<hdi::tcltasks::detail::collection_wrapper_base const*>, boost::hash<hdi::tcltasks::detail::collection_wrapper_base const*>, std::__detail::_Mod_range_hashing, std::__detail::_Default_ranged_hash, std::__detail::_Prime_rehash_policy, std::__detail::_Hashtable_traits<true, false, false> >::equal_range(hdi::tcltasks::detail::collection_wrapper_base const* const&)+0x2b) [0x7f0adffba66b]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/librdi_common.so(+0x5ad93e) [0x7f0adffba93e]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/librdi_common.so(hdi::tcltasks::detail::collection_wrapper_base::~collection_wrapper_base()+0x17) [0x7f0adffb99b7]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/librdi_common.so(+0x4210fa) [0x7f0adfe2e0fa]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/librdi_common.so(hdi::tcltasks::detail::collection_wrapper_base::decr_ref() const+0x14) [0x7f0adffb9294]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/librdi_tcltasks.so(+0x9a5ee0) [0x7f0ad3d7aee0]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/librdi_tcltasks.so(+0xbf9123) [0x7f0ad3fce123]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/libboost_program_options.so(boost::program_options::option_description::~option_description()+0x7a) [0x7f0add88a72a]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/libboost_program_options.so(boost::program_options::option_description::~option_description()+0x9) [0x7f0add88a7f9]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/librdi_common.so(hdi::tcltasks::options_description::~options_description()+0x142) [0x7f0adffc9ba2]
+/lib/x86_64-linux-gnu/libc.so.6(+0x3c259) [0x7f0adef61259]
+/lib/x86_64-linux-gnu/libc.so.6(+0x3c2a5) [0x7f0adef612a5]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/librdi_dsp.so(HDSWaDesignManager::monitorParentProcess()+0x2c9) [0x7f0ac0f385e9]
+/opt/Xilinx16/Vivado/2016.2/lib/lnx64.o/libboost_thread.so(+0xeff5) [0x7f0add15bff5]
+/lib/x86_64-linux-gnu/libpthread.so.0(+0x8182) [0x7f0adea09182]
+/lib/x86_64-linux-gnu/libc.so.6(clone+0x6d) [0x7f0adf01f47d]

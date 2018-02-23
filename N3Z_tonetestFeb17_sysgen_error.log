@@ -1,0 +1,27 @@
+--------------------------------- Version Log ----------------------------------
+Version                                 Path
+System Generator 2016.2                 C:/Xilinx/Vivado/2016.2
+Matlab 8.4.0.150421 (R2014b)            C:\Program Files\MATLAB\R2014b
+Vivado 2016.2                           C:/Xilinx/Vivado/2016.2
+--------------------------------------------------------------------------------
+Summary of Errors:
+Error 0001: ERROR: An error occurred when creating the Vivado project...
+     Block: Unspecified
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  Unspecified
+
+Details:
+ERROR: An error occurred when creating the Vivado project.
+can't create directory
+"C:/Users/gnaylor.CCFEPC/Dropbox/SysgenOutput/TE0722/ToneDetect2/ip":
+permission denied
+INFO: [Common 17-206] Exiting Vivado at Fri Mar 03 09:44:47 2017...
+... 
+
+For more information please refer to 'C:/Users/gnaylor.CCFEPC/Dropbox/SysgenOutput/TE0722/ToneDetect2/vivado.log'
+
+--------------------------------------------------------------------------------

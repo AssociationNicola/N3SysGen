@@ -1,0 +1,37 @@
+#-----------------------------------------------------------
+# Vivado v2016.2 (64-bit)
+# SW Build 1577090 on Thu Jun  2 16:32:35 MDT 2016
+# IP Build 1577682 on Fri Jun  3 12:00:54 MDT 2016
+# Start of session at: Fri Dec  2 08:32:41 2016
+# Process ID: 18711
+# Current directory: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen
+# Command line: vivado
+# Log file: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen/vivado.log
+# Journal file: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen/vivado.jou
+#-----------------------------------------------------------
+start_gui
+open_project /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.xpr
+update_compile_order -fileset sources_1
+file copy -force /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.runs/impl_1/PS_PL_wrapper.sysdef /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk/PS_PL_wrapper.hdf
+
+launch_sdk -workspace /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk -hwspec /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk/PS_PL_wrapper.hdf
+close_project
+open_hw
+connect_hw_server
+open_hw_target
+current_hw_device [lindex [get_hw_devices] 1]
+refresh_hw_device -update_hw_probes false [lindex [get_hw_devices] 1]
+refresh_hw_device [lindex [get_hw_devices] 1]
+set_property PROBES.FILE {/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.runs/impl_1/debug_nets.ltx} [lindex [get_hw_devices] 1]
+set_property PROGRAM.FILE {/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.runs/impl_1/PS_PL_wrapper.bit} [lindex [get_hw_devices] 1]
+program_hw_devices [lindex [get_hw_devices] 1]
+refresh_hw_device [lindex [get_hw_devices] 1]
+display_hw_ila_data [ get_hw_ila_data hw_ila_data_1 -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+set_property CONTROL.CAPTURE_MODE BASIC [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+set_property CONTROL.TRIGGER_POSITION 10 [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+set_property TRIGGER_COMPARE_VALUE eq1'b1 [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tvalid -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+run_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+wait_on_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]
+display_hw_ila_data [upload_hw_ila_data [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]]
+write_hw_ila_data {/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.runs/impl_1/iladata2.ila} hw_ila_data_1
+run_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]

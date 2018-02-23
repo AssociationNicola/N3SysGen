@@ -1,0 +1,1855 @@
+;GVA4 correct bad setting of AvesignalMSB instead of USB (caused crashing)
+;GVA2 BT input from mic is taken externally in logic - also removed audio double so as not to saturate voice on transmission (but will drop volume on handset ~6dB)
+;AND over haul AGC to use 24 bit average level registering so level is monitored with AveSignalUSB
+;GVA1 Try to implement tone detect parts
+ ;GVA0 Project to get AGC to act on external MUX, but still use last 4 bits for decrease 3dB and 1.5dB in the Pico
+;GV9B to do - mods to detect start and end tones
+;GV96 readjust AGC settings and bit offsets
+;GV93add back divide by 2 on transmit line 567
+; GV51 remove level divide by 2 on transmit to compensate for drop in AGC level (so only reduces level for receive)
+;GV50, drop DSP AGC levels back to just below as in GV45
+;GV47 increase DSP AGC thresholds
+;GV46 added further double on RF out amplitude
+;GV45 Corrected resetting of AveSignalMSB to middle value so as to avoid double jump and increased allowable rang to avoid unnecessary jumps (abd corrected AGC wrapping in GV44 when limiting if greater than 44 rather than to 44 ie CALL Z not CALL NC !!!)
+;GV44 add 1_5dB decrease - still need to correct AGC range (increase another factor 2) and decrease limits
+;GV43 correct beacon phase wander
+;GV42 disable UART streaming
+;GV3F Add streaming over UART on TX (State bit 2 set)
+;GV3E try adding small sine wave - not yet implemented
+;For GV3D, need to add further routines, increaseAGC2 and increaseAGC4 that increase attenuation 6dB and 12dB respectively (within limits) - look at how AveSignalMSB is reset.
+
+;For GV3B try to correct incorrect AGC operation with twice as many values
+;store TX AGCvalue before warble (or when stable) and add 3dB steps to AGCvalue
+;31/1/13 Added 12dB to BT mic level using Audiodouble
+;GV38 Use audio double on transmitpath
+;For GV37 Adjusted AGC thresholds and increased time constant a factor 8.
+;31/12/12 increase volume and transmitted power by increasing AGC setting a factor of 2 (from 4,12 to 8,24 - AGCupp/lowthreshold). Also set AGCvalue to 06 INITIALY (may need to be adjusted) recall last AGCvalue when switch mode. Line 439 increase TX modulation.
+;removed LPF
+;Increased AGC setting -36 OK, 72 too high (bad clipping noise)
+;Slow saturation of SSBamp
+;Added BT signal not present flag (16/1/12)
+;Try to fix failure to un-block DSP problem (18/11/11 in DSPblock routine)
+;Uses phase representation of TX audio - works in study OK 18/11/11
+;29/8/11 Increased audio frequency resolution to 16 bits
+;19/8/11, tweaked audio scaling of TX
+;Modified vor BT input
+;This needs to be modified for COTS version at 49.152MHz - in particular calibration of audio frequency output to SSB modulator has been modified see line 398
+; Inputs sine wave as audio
+; 20/7 updated input and output ports for multipico version
+
+; Feb 09 Start testing AGC part of streamed signal
+; Now implementing on SSBN.mdl
+; 
+; DSP routine for SSB picoblaze
+; 
+; Implemented commands:
+; 0 = RX mode
+
+
+
+
+CONSTANT	AGClowthreshold,		6'd   			;;These are thresholds for the measured signal
+CONSTANT	AGClowthreshold2,		3'd   			;;These are thresholds for the measured signal
+CONSTANT	AGCInitial,		8'd   			;;This is mid way between thresholds
+
+CONSTANT	AGCuppthreshold,		10'd
+CONSTANT	AGCuppthreshold2,		15'd			;3dB above first threshold
+CONSTANT	AGCuppthreshold4,		22'd
+
+CONSTANT	delay_1us_constant,	  	12'd                  ; Value (13)19 or 12? decimal suitable for 50MHz clock – about 8 for 20MHz
+CONSTANT	m,						8'd                   ; No. of iterations for cordic
+CONSTANT	m_plus_1,				9'd                   ; No. of iterations for cordic
+CONSTANT	count_1000_lsb,			E8                 	  ; lower 8-bits of 1000 count value
+CONSTANT	count_1000_msb,			03                    ; upper 8-bits of 1000 count value
+CONSTANT	half_pi_LSB,			00                     ; 
+CONSTANT	half_pi_MSB,		 	40                    ; 360 degrees = $10000
+CONSTANT	audioTest,				2'd                   ; Frequency 2=800Hz, 3=1200Hz, 4=1.6kHz 7=2.8kHz
+
+;Frequency values for start and stop tones
+CONSTANT	StrtToneAInc,			9F
+CONSTANT	StrtToneBInc,			69
+CONSTANT	StopToneAInc,			5A
+CONSTANT	StopToneBInc,			78
+
+; FIR coefficients for 0 and 90 degree filterred signals, these are SIGNED values!!
+CONSTANT	coeffI0MSB,				F6                 ; Smallest coefficient (negative value!)
+CONSTANT	coeffI0LSB,				92
+CONSTANT	coeffI1MSB,				F4
+CONSTANT	coeffI1LSB,				8A
+CONSTANT	coeffI2MSB,				F2
+CONSTANT	coeffI2LSB,				CC
+CONSTANT	coeffI3MSB,				F1
+CONSTANT	coeffI3LSB,				77
+CONSTANT	coeffI4MSB,				F0
+CONSTANT	coeffI4LSB,				A1
+CONSTANT	coeffI5MSB,				40                 ; Actualy half value of peak
+CONSTANT	coeffI5LSB,				00
+; Q values are still signed but are all positive
+CONSTANT	coeffQ0MSB,				00                 ; Smallest coefficient
+CONSTANT	coeffQ0LSB,				A7
+CONSTANT	coeffQ1MSB,				05
+CONSTANT	coeffQ1LSB,				2D
+CONSTANT	coeffQ2MSB,				0C
+CONSTANT	coeffQ2LSB,				83
+CONSTANT	coeffQ3MSB,				1B
+CONSTANT	coeffQ3LSB,				4F
+CONSTANT	coeffQ4MSB,				5C
+CONSTANT	coeffQ4LSB,				2F
+
+
+; Registers
+NAMEREG		sF, AveSignalUSB            ; In fact average of magnitude
+NAMEREG		sE, AveSignalMSB
+NAMEREG		sD, AveSignalLSB
+;NAMEREG		sD, BaselineMSB                  ; In fact average of signed signal
+;NAMEREG		sC, BaselineLSB
+NAMEREG		sC, SineCtr				  ;Aargh sB is used by the Cordic!! - but not used now
+
+; registers sA-sD are used for longish term storage...!
+; sA used for cordic calcs and FIR work for relative pos of roving ptr
+
+; Scratch pad
+; registers 0-8 used for cordic table:
+; reg 0=45degrees
+; ..
+; reg 7=0.44761degrees
+
+; Input port
+CONSTANT	AudioMSB,		0'd
+CONSTANT	AudioLSB,		1'd
+CONSTANT	Strobe,			2'd                   ; 	   bit0=6kHz square wave - the rest are now zeros
+CONSTANT	Command,		3'd                   ; From interface pico
+CONSTANT	MltplyMSB,		4'd                   ; Top significant byte of multiplier output
+CONSTANT	MltplyLSB,		5'd                   ; (only 16 bits retained)
+CONSTANT	BTaudioMSB,		6'd                   ; Input from headset micro
+CONSTANT	BTaudioLSB,		7'd                   ; 
+CONSTANT	RAMdataMSB,		8'd					  ;Data from variable storage RAM
+CONSTANT	RAMdataLSB,		9'd
+CONSTANT	Status,			10'd				  ;bit 0 is DSP2user fifo full, bit 1 is no BT audio stream from headset microphone.
+
+
+
+
+; Output ports
+
+CONSTANT	MSBAudio,			0'd
+CONSTANT	LSBAudio,			1'd
+CONSTANT	SSBAmp,				2'd
+CONSTANT	CmdToUser,			3'd
+CONSTANT	CoeffMSB,			4'd
+CONSTANT	CoeffLSB,			5'd
+CONSTANT	SignalMSB,			6'd
+CONSTANT	SignalLSB,			7'd
+
+
+CONSTANT	Data2archiveMSB,	10'd
+CONSTANT	Data2archiveLSB,	11'd
+CONSTANT	Controlbits,		12'd                  ; BIT OFFSETS:
+; Bit offsets:
+CONSTANT	EnMult,				1'd
+
+CONSTANT	AckFIFO,			32'd                  ; 		5 Acknowledge FIFO (present character)
+
+
+
+CONSTANT	PhaseIncrement ,	13'd
+CONSTANT	AudioFreqLSB,		14'd
+CONSTANT	AudioPhaseMSB,		15'd
+CONSTANT	AudioPhaseLSB,		16'd
+CONSTANT	EnableSpeaker,		17'd
+CONSTANT	MUXport,			18'd 			  ;New port to drive AGC MUX
+CONSTANT	StartToneA,			19'd
+CONSTANT	StartToneALong,		20'd
+CONSTANT	StartToneB,			21'd
+CONSTANT	StartToneBLong,		22'd
+CONSTANT	StopToneA,			23'd
+CONSTANT	StopToneALong,		24'd
+CONSTANT	StopToneB,			25'd
+CONSTANT	StopToneBLong,		26'd
+
+
+
+; Scratchpad registers
+; 0-8 used for Cordic Table!
+CONSTANT	AmpMSB,				10'd
+CONSTANT	AmpLSB,				11'd                  ; Bit 0 toggles at 16kHz
+CONSTANT	PhaseMSB,			12'd
+CONSTANT	PhaseLSB,			13'd                  ; Is this necessary?
+CONSTANT	AGCvalue,			14'd                  ; Two times number of bits to shift (250-11) ie -6 (FA -wk signal) to 11 (0B -Strong signal)
+CONSTANT	VolSetting,			15'd
+CONSTANT	OldPhaseMSB,		16'd
+CONSTANT	AudioScratch,		17'd
+
+CONSTANT	State,				18'd                  ; Bit 1 0=RX, 1=TX (TX_high), Bit 2 set is streaming TX data from UART
+
+;CONSTANT	NormalisedSignalMSB,			19'd                  ; Current signal MSB after AGC
+CONSTANT	LVPtr,				20'd                  ; From HistoryStart to HistoryStart+41 (place to store most recent signal value)
+
+CONSTANT	IaccuMSB,			21'd
+CONSTANT	IaccuLSB,			22'd
+CONSTANT	QaccuMSB,			23'd
+CONSTANT	QaccuLSB,			24'd
+CONSTANT	OldPhaseLSB,		25'd
+
+; Scratch pad 30-69 used for sinewave - 20 values for sinewave, 40 for dirac
+
+CONSTANT	startsine,			30'd
+CONSTANT	endsine,			45'd
+CONSTANT	HistoryStart,		70'd                  ; 2 bytes per historical sample - 21 2byte history values
+CONSTANT	HistoryStart42,		112'd                 ; 2 bytes per historical sample - 21 2byte history values
+; History values up to and including 111
+
+
+CONSTANT	AGCvalueTX,			112'd
+CONSTANT	AGCvalueRX,			113'd
+CONSTANT	AGCcounter,			114'd 			 	;store counter 0 to 255 to only perform AGC calc every 1 in 4 audio samples and sinewave increment every 8 samples
+CONSTANT	UARTBitshift,		115'd
+
+;Register values for tone detection part
+CONSTANT	AveStrtToneAMSB_I,		116'd
+CONSTANT	AveStrtToneALSB_I,		117'd
+CONSTANT	AveStrtToneBMSB_I,		118'd
+CONSTANT	AveStrtToneBLSB_I,		119'd
+
+CONSTANT	AveStopToneAMSB_I,		120'd
+CONSTANT	AveStopToneALSB_I,		121'd
+CONSTANT	AveStopToneBMSB_I,		122'd
+CONSTANT	AveStopToneBLSB_I,		123'd
+
+CONSTANT	LongAveStrtToneAMSB_I,	124'd
+CONSTANT	LongAveStrtToneALSB_I,	125'd
+CONSTANT	LongAveStrtToneBMSB_I,	126'd
+CONSTANT	LongAveStrtToneBLSB_I,	127'd
+
+CONSTANT	LongAveStopToneAMSB_I,	128'd
+CONSTANT	LongAveStopToneALSB_I,	129'd
+CONSTANT	LongAveStopToneBMSB_I,	130'd
+CONSTANT	LongAveStopToneBLSB_I,	131'd
+
+CONSTANT	AveStrtToneAMSB_Q,		132'd
+CONSTANT	AveStrtToneALSB_Q,		133'd
+CONSTANT	AveStrtToneBMSB_Q,		134'd
+CONSTANT	AveStrtToneBLSB_Q,		135'd
+
+CONSTANT	AveStopToneAMSB_Q,		136'd
+CONSTANT	AveStopToneALSB_Q,		137'd
+CONSTANT	AveStopToneBMSB_Q,		138'd
+CONSTANT	AveStopToneBLSB_Q,		139'd
+
+CONSTANT	LongAveStrtToneAMSB_Q,	140'd
+CONSTANT	LongAveStrtToneALSB_Q,	141'd
+CONSTANT	LongAveStrtToneBMSB_Q,	142'd
+CONSTANT	LongAveStrtToneBLSB_Q,	143'd
+
+CONSTANT	LongAveStopToneAMSB_Q,	144'd
+CONSTANT	LongAveStopToneALSB_Q,	145'd
+CONSTANT	LongAveStopToneBMSB_Q,	146'd
+CONSTANT	LongAveStopToneBLSB_Q,	147'd
+
+;Pointers for tones in sinewave - use 4 bits for actual ptr in scratchpad (bottom 2bits of MSB and top 2 bits of LSB)
+CONSTANT	StrtToneAPtrMSB,		148'd
+CONSTANT	StrtToneAPtrLSB,		149'd
+CONSTANT	StrtToneBPtrMSB,		150'd
+CONSTANT	StrtToneBPtrLSB,		151'd
+
+CONSTANT	StopToneAPtrMSB,		152'd
+CONSTANT	StopToneAPtrLSB,		153'd
+CONSTANT	StopToneBPtrMSB,		154'd
+CONSTANT	StopToneBPtrLSB,		155'd
+
+CONSTANT	FirstToneInc,			156'd   ;4 Locations to store tone increments (actually there are 4 unused registers here as well)
+CONSTANT	FirstToneInc02,			158'd   ;4 Locations to store tone increments (actually there are 4 unused registers here as well)
+CONSTANT	FirstToneInc04,			160'd   ;4 Locations to store tone increments (actually there are 4 unused registers here as well)
+CONSTANT	FirstToneInc06,			162'd   ;4 Locations to store tone increments (actually there are 4 unused registers here as well)
+
+CONSTANT	NormalisedMagMSB,		164'd   ;Absolute value of current signal
+CONSTANT	NormalisedMagLSB,		165'd   ;Absolute value of current signal
+
+
+;GenerateCode        MEM       "S3eDSPprog.mem"
+
+
+;start:              JUMP      cold_start	  	  	-Try without jump to $20 offset - should work!?
+; Start of program (Jump instruction in preloaded memory!)
+ ;                   ORG       $20
+; pre-load scratchpad with cordic table.. 360 degrees is $0800 - then *32=$10000
+cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actually a bit less!
+                    STORE     s0, 00
+                    LOAD      s0, 151'd             ; phase for 26.565 degrees
+                    STORE     s0, 01
+                    LOAD      s0, 80'd              ; phase for 14.036 degrees
+                    STORE     s0, 02
+                    LOAD      s0, 41'd              ; phase for 7.125 degrees
+                    STORE     s0, 03
+                    LOAD      s0, 20'd              ; phase for 3.576 degrees
+                    STORE     s0, 04
+                    LOAD      s0, 10'd              ; phase for 1.79 degrees
+                    STORE     s0, 05
+                    LOAD      s0, 5'd               ; phase for 0.895 degrees
+                    STORE     s0, 06
+                    LOAD      s0, 3'd               ; phase for 0.448 degrees
+                    STORE     s0, 07
+                    LOAD      s0, 1'd               ; phase for 0.224 degrees
+                    STORE     s0, 08
+                    
+                    LOAD	  s0,16'd
+                    STORE	  s0,AGCvalueTX
+                    STORE	  s0,AGCvalueRX
+
+
+; LOAD      s1, 30
+; LOAD      s0, 0
+; diracload:          STORE     s0, s1
+; ADD       s1, 1
+; COMP      s1, 69
+; JUMP      NZ, diracload
+; LOAD      s0, 75
+; STORE     s0, 69
+
+
+;Sinewave table: Step through this 1 in 8 loops to give 62.5Hz sinewave on transmission
+                    LOAD      s0, 2'd               ; 1st element of sinewave
+                    STORE     s0, 30'd
+                    LOAD      s0, 3'd              ; 2nd element of sinewave
+                    STORE     s0, 31'd
+                    LOAD      s0, 4'd              ; 3rd element of sinewave
+                    STORE     s0, 32'd
+                    LOAD      s0, 4'd              ; etc
+                    STORE     s0, 33'd
+                    LOAD      s0, 4'd              ; etc
+                    STORE     s0, 34'd
+                    LOAD      s0, 3'd              ;
+                    STORE     s0, 35'd
+                    LOAD      s0, 2'd              ; etc
+                    STORE     s0, 36'd
+                    LOAD      s0, 0'd              ; etc
+                    STORE     s0, 37'd
+                    LOAD      s0, 254'd               ; etc
+                    STORE     s0, 38'd
+                    LOAD      s0, 253'd               ;
+                    STORE     s0, 39'd
+                    LOAD      s0, 252'd             ; etc
+                    STORE     s0, 40'd
+                    LOAD      s0, 252'd             ; etc
+                    STORE     s0, 41'd
+                    LOAD      s0, 252'd             ; etc
+                    STORE     s0, 42'd
+                    LOAD      s0, 253'd             ;
+                    STORE     s0, 43'd
+                    LOAD      s0, 254'd             ; etc
+                    STORE     s0, 44'd
+                    LOAD      s0, 0'd             ; etc
+                    STORE     s0, 45'd
+    ;                LOAD      s0, 254'd             ; etc
+ ;                   STORE     s0, 46'd
+  ;                  LOAD      s0, 0'd             ;
+   ;                 STORE     s0, 47'd
+    ;                LOAD      s0, 247'd             ; etc
+     ;               STORE     s0, 48'd
+      ;              LOAD      s0, 0'd               ; etc
+       ;             STORE     s0, 49'd
+	   				 LOAD      s0,StrtToneAInc
+	   				 STORE	   s0,FirstToneInc
+	   				 LOAD      s0,StrtToneBInc
+	   				 STORE	   s0,FirstToneInc02
+	   				 LOAD      s0,StopToneAInc
+	   				 STORE	   s0,FirstToneInc04
+	   				 LOAD      s0,StopToneBInc
+	   				 STORE	   s0,FirstToneInc06
+
+
+
+
+
+
+
+
+                    LOAD      s0, 42'd
+                    OUTPUT    s0, SSBAmp
+                    LOAD      s0, 00
+                    STORE     s0, State           ; Set state to 0 ie receive 
+
+                    LOAD      SineCtr, startsine  ; reset SineCtr
+                    LOAD      s0, HistoryStart	   	 ;aargh - had commented this out!!!! May2013
+                    STORE     s0, LVPtr
+                    
+ 
+
+; Initialise AGC
+                    LOAD      s0, 255'd             ; - 1
+                    STORE     s0, VolSetting
+                    LOAD	  s0,32'd				  ;Start with mid value for external AGC MUX version
+                    STORE     s0, AGCvalue		  ;maybe start with 16 (was 8)?
+                    LOAD      AveSignalUSB, AGCInitial   ; set signal averager to moderate level
+;                    LOAD      AveSignalUSB, AGClowthreshold       ; set signal averager to moderate level
+;                    ADD       AveSignalUSB, AGCuppthreshold       ; set signal averager to moderate level
+;					SR0       AveSignalUSB
+;                    LOAD	  BaselineMSB,0
+
+
+; routine to take signal in s0,s1,s2 (MSB-LSB) and return 16bit signal in s0,s1 using AGC and volume settings
+; TO DOOOOOOOOOOOO
+
+
+; Routine to look at lowest bit of Strobe to detect rising edge.
+AwaitAudioVal:	  	INPUT     s0, Strobe
+                    AND       s0, 01               ; look only at lowest bit
+                    COMPARE   s0, 01
+                    JUMP      Z, AwaitAudioVal    ; if 1 wait...
+AwaitRise:          INPUT     s0, Strobe
+                    AND       s0, 01               ; look only at lowest bit
+                    COMPARE   s0, 00
+                    JUMP      Z, AwaitRise        ; if 0 still, wait a bit more...
+
+
+
+ 					INPUT     s0, AudioLSB	   ; Now have the new value (different addresses from before!)
+ 					INPUT 	  s1,AudioMSB
+; 					INPUT 	  s2,AudioUSB	   ;not when using external MUX for AGC
+ 					
+ 					
+ 					
+;					OUTPUT     s1,Data2archiveLSB 	  	  		  ;This is received demodulated data - normally s0
+;					OUTPUT     s2,Data2archiveMSB
+ 					
+ 					
+; Temp sine wave simulation
+;Display demodulated values always:
+;					OUTPUT     s1,Data2archiveLSB
+;					OUTPUT     s2,Data2archiveMSB
+  	   			 		
+;                    ADD       SineCtr, audioTest
+ ;                   COMP      SineCtr, 50         ; should be 50 with sine wave - extend to 70 for dirac!
+  ;                  JUMP      C, contsine         ; skip over if still below 50
+   ;                 SUB      SineCtr, 20  ; reset counter back to start (1 period)
+   					 
+;contsine:           FETCH     s1, SineCtr         ; put value of sine from table into AudioMSB
+ ;                   LOAD      s2, 0
+  ;                  LOAD	   s0,0
+   ;                 COMP      s1, 128             ; but is sine negative?
+    ;                JUMP      C, skipneg
+     ;               LOAD      s2, 255             ; interpret as negative number
+;skipneg:
+
+
+
+; now apply volume setting
+; FETCH     s3, VolSetting
+; CALL      AGC
+
+;This part allows insertion of UART streamed values on RX and transmit - removed in GV42
+;	  	            FETCH  	  s3,State
+;					AND		  s3,4
+;					COMP	  s3,4	 	 		  ;is this stream mode
+;					CALL	  Z,GetUartValues
+;_____________________________________________________________											
+
+
+
+
+; perform automatic gain contrl
+                    FETCH     s3, AGCvalue
+					CALL      AGC 		  						;Now with external MUX to adjust AGC
+					CALL	  Abs16Val
+					STORE	  s3,NormalisedMagMSB				
+					STORE	  s2,NormalisedMagLSB				
+
+
+                    
+;_______________Add Jan 2013 to increase volume without clipping____________Sept 2015 Not during transmit!
+; 							CALL	AudioDouble
+; 							CALL	AudioDouble		   ;increase volume 12 dB!
+
+;_____________________________________________________________________________
+
+
+
+;Now check if we are transmitting this value!
+
+                    FETCH     s2, State
+                    AND       s2, 02
+                    COMPARE   s2, 02               ; Check if transmit mode
+                    JUMP      Z, TransmitAudio
+
+
+
+
+; This section will only be performed in receive mode
+
+
+; Perform volume adjustment here **********To Be Done************************				
+;  		  		 			SL0	 	s0
+ ; 		  		 			SLA		s1		  ;double received signal to speaker
+;  		  		 			SL0	 	s0
+ ; 		  		 			SLA		s1		  ;further double received signal to speaker BUT removed 31/12/12 as was clipping with AGC thresholds set
+ 
+; 							CALL	AudioDouble		   ;increase volume another 6 dB on receive! - removed 28/5/13
+
+;_______________________________
+;Test value by sending out to Uart - shift this section as required - but check s3 not used! Removed for GV42 and GV45
+;				   LOAD     s3, s1
+					
+;				   SRX	  s3
+;	                    OUT       s3, CmdToUser	  	;Send receive signal in 7 bits (divide by 2!) to user pico to send to UART
+;__________________________________
+
+ 							CALL	AudioDouble		   ;increase volume 12 dB! Add 2 of these 26/2/15
+ 							CALL	AudioDouble		   ;increase volume 12 dB!
+
+ 
+		 				    OUTPUT    s1, MSBAudio	   
+        					OUTPUT    s0, LSBAudio
+;Display demodulated values only in receive
+							OUTPUT  s0,Data2archiveMSB 	  	  		  ;This is received demodulated data
+							OUTPUT  s1,Data2archiveLSB
+							SLA		s0				  ;shift top bit into carry
+							ADDCY	s1,00			  ;s1 now rounded value of upper 8 bits (but s0 wasted!)
+					
+;Disable for the moment!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+;							CALL	  AverageToneDemod ;Maybe stuck due to scratchpad not being 256 extended
+
+                   
+
+; Check if there is a command from the User, return here with JUMP command from TransmitAudio macro
+BackfromTransmitting: 	INPUT   s0, Command         ; Check if FIFO character present
+						COMPARE s0, 128'd             ; is there a character?
+						CALL      C, Respond2Fifo
+
+
+
+; Accumulate magnitude
+;__________________________________________________________________________________________
+;Only do this 1 in 4 (8) times -add this part to Pete's Jan 2013 code - should give 1s time constant on AGC to try and reduce gain ramping up during quiet speech parts
+	  	 	  	   FETCH   s3,AGCcounter
+	  	 	  	   ADD	   s3,01
+	  	 	  	   STORE   s3,AGCcounter
+;	  	 	  	   AND	   s3,3			;take only lowest 2 bits
+;	  	 	  	   COMP	   s3,0	;skip 4 times (default 8?)
+ ;                   JUMP   NZ,AwaitAudioVal  ;if not 8th time then go back to start
+;                    LOAD   s3,0   Don't need to do this as lowest 2 bits are already zero
+;	  	 	  	   STORE   s3,AGCcounter
+ 	 	  	
+;NOW do it every time!
+;_____________________________________________________________________________________________
+
+;Need to overhaul this !! Oct2015
+;So do this bit at 8kHz rate - so has about a 1s time constant
+; Add 1/32 x abs(new normalised value - which is 256 times smaller than averaged value)
+                    FETCH      s3, NormalisedMagMSB
+                    FETCH      s2, NormalisedMagLSB		  ;These are absolute values
+
+					CALL	   Divide32
+
+
+
+
+                    ADD       AveSignalLSB, s2
+                    ADDCY      AveSignalMSB, s3
+					ADDCY      AveSignalUSB, 00
+
+; now subtract 1/8192 of current value of average
+                    LOAD      s3, AveSignalUSB
+                    LOAD      s2, AveSignalMSB	 ; These should be positive values!
+
+                  	CALL	  Divide32
+                  	SUB		AveSignalLSB,s2
+                  	SUBCY	AveSignalMSB,s3
+                  	SUBCY	AveSignalUSB,00
+                  	
+                    
+
+
+; Accumulate signed value - try to get DC offset - but apparently not used
+; Add 1/256 x abs(new normalised value)
+;                    FETCH      s3, NormalisedSignalMSB
+ ;                   LOAD      s4, 0
+  ;                  COMP      s3, 128
+   ;                 JUMP      C, ispos1           ; the signal is positive
+    ;                LOAD      s4, $FF             ; in case accum signed value is negative (which it could well be!!!
+;ispos1:             ADD       BaselineLSB, s3
+ ;                   ADDC      BaselineMSB, s4
+
+; now subtract 1/256of current baseline value
+;                    LOAD      s3, BaselineMSB
+  ;                  LOAD      s4, 0
+ ;                   COMP      s3, 128
+   ;                 JUMP      C, ispos2           ; the accumulated value is positive
+    ;                LOAD      s4, $FF             ; in case accum signed value is negative (which it could well be!!!
+;ispos2:             SUB       BaselineLSB, s3
+ ;                   SUBC      BaselineMSB, s4
+
+;TEMP DISPLAY of AveSignalMSB!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+				LOAD	s3,AveSignalUSB		   ;AveSignalMSB is actually a register!
+				OUTPUT	s3,StopToneALong
+				LOAD	s3,AveSignalMSB		   ;AveSignalMSB is actually a register!
+				OUTPUT	s3,StopToneB
+				LOAD	s3,AveSignalLSB		   ;AveSignalMSB is actually a register!
+				OUTPUT	s3,StopToneBLong
+
+
+	 			FETCH   s3, AGCvalue
+				OUTPUT	s3,StopToneA	   	   	   ;TEMP !!!!!!!!!!!!!!!! send AGC value to this position
+
+
+; Now adjust AGC value if necessary
+  	  		    FETCH     s3, AGCvalue
+  	  		    COMPARE   AveSignalUSB, AGCuppthreshold4	  ;Is really big? ie at threshold or above
+                CALL      NC, increaseAGC4     ; signal too big, increase attenuation by 12dB
+
+  	  		    COMPARE   AveSignalUSB, AGCuppthreshold2	  ;Is pretty big
+                CALL      NC, increaseAGC2     ; signal too big, increase attenuation by 6dB
+
+                COMPARE   AveSignalUSB, AGCuppthreshold	  ;or 18 or 9
+                CALL      NC, increaseAGC     ; signal slightly too big, increase attenuation by 1_5dB
+
+                COMPARE   AveSignalUSB, AGClowthreshold2	  ;
+                CALL      C, decreaseAGC2					  ;ie below threshold2 (4 or below)
+
+
+                COMPARE   AveSignalUSB, AGClowthreshold	  ; ie below threshold (7 or less)
+                CALL      C, decreaseAGC
+                STORE     s3, AGCvalue
+
+
+
+                JUMP      AwaitAudioVal
+
+; -------------This is end of main loop--------------------------------
+
+;Routine to take 16 bit value in s3,s2 and shift right by 5 to divide by 32 and leave value in s3,s2
+;Assumes this is an unsigned numbers - normally used on a magnitude.
+Divide32:  CALL		Divide4
+		   CALL		Divide4
+		   SR0		s3
+		   SRA		s2
+
+		   RETURN
+		
+Divide4:   SR0		s3
+		   SRA		s2
+		   SR0		s3
+		   SRA		s2
+		   RETURN		
+
+
+
+SpeakerOn:		 LOAD 	s1,01
+				 OUTPUT s1,EnableSpeaker
+		 		 RETURN
+		 		 
+SpeakerOff:		RETURN	 				 ;Disable for the moment
+				LOAD 	s1,00
+				OUTPUT	s1,EnableSpeaker
+		 		 		
+		 		RETURN
+		 		 
+;Routines to average I and Q demodulated tone signals
+;Check the amplitude of the demodulated and averaged signals compared to long average - AGCcounter==0 can be used to top up long average
+;s7 used to note if LO is negative
+;Enter with received signal MSB in s1 and try and keep in s8!
+;first accumulate short and long averages of all tones I and Q
+AverageToneDemod:	 LOAD s8,s1
+				 LOAD s6,00		   ;This will be used to count through 4 tones in the loop below
+				 
+DemodLoop:		 LOAD s5,StrtToneAPtrLSB 	  ;value of LSB of pointer to Scratchpad element for TonePtrs
+				 ADD  s5,s6				;Move up to ptr being treated
+				 FETCH s0,(s5)			;the tone pointer for the LSB should now be in s0
+				 LOAD  s2,FirstToneInc	;Scratch address for StrtToneAInc
+				 ADD   s2,s6
+				 FETCH s4,(s2)			;Get StrtToneAInc in s4 etc...
+				 SUB   s5,01				;Back 1 index to MSB
+				 FETCH s1,(s5)			;the sinewave pointer for the MSB should now be in s1				
+				 ADD  s0,s4				;Increment LSB!!
+				 ADDCY s1,00				;Add carry to MSB 	  ->This is OK as increment is positive	  	  	  		 	 	   					 	  	 	
+				 STORE s1, (s5)			;Value of MSB of sinewave pointer has been incremented in scratch pad
+				 ADD  s5,01
+				 STORE s0, (s5)			;Value of LSB of pointer has been incremented in scratch pad
+;now rotate 16 bit pointer to get 4 bits used to address the sinewave values
+				 SL0   s0
+				 SLA   s1
+				 SL0   s0
+				 SLA   s1
+				 AND   s1,0F			;keep lowest 4 bits to have pointer to one of 16 sinewave values
+				 LOAD  s9,s1
+				 FETCH s3,(s9)		  ;get sinewave at ptr value in s9 and put in s3
+				 CALL  MultSigByLO
+				 
+				 
+				 
+				 
+				 
+;Now need to accumulate demodulated I value which is in s1:
+
+
+;value to accumulate is in s1
+	   	        LOAD s2, AveStrtToneALSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
+	   	        CALL 	DoAccumulate
+	   	         
+
+
+;Now treat Q_LO value
+
+				ADD   s9,04			  ;add 1/4 period
+				AND   s9,0F			;keep lowest 4 bits to have pointer to one of 16 cosinewave values
+				FETCH s3,(s9)			  ;get cosinewave at ptr value in s9 and put in s3
+				CALL  MultSigByLO
+				
+; accumulate demodulated Q value which is in s1:
+
+
+	   	        LOAD s2, AveStrtToneALSB_Q
+				CALL 	DoAccumulate
+	   	         	
+	            FETCH  s0,AGCcounter
+	            COMPARE   s0,00
+	            CALL   Z,DolongAve
+	
+;now check for end of looping
+				 ADD   	s6,02	 			  ;next tone
+				 COMPARE s6,08
+				 JUMP NZ, DemodLoop		  ;loop if more tones to demodulate
+
+;Now check amplitude of demodulated signals
+	 	        FETCH	s3,AveStrtToneAMSB_I
+	 	        CALL	absval				;Get the magnitude
+	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
+	 	        FETCH	s3,AveStrtToneAMSB_Q
+	 			CALL	absval				;Get the magnitude
+	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
+	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
+;				SR0	s0					;Divide by 2 again
+;				SR0	s0					;Divide by 2 again - increase gain by further 4
+	 	
+	 	        FETCH	s3,LongAveStrtToneAMSB_I
+	 	        CALL	absval				;Get the magnitude
+	 	        LOAD	s1,s3				;Abs value of ToneA_I in s1
+	 	        FETCH	s3,LongAveStrtToneAMSB_Q
+	 			CALL	absval				;Get the magnitude
+	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s1
+	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
+;Now s1 has long term average level and s0 has short term average value of start tone A (but 4 times smaller)
+				OUTPUT	s0,StartToneA
+				OUTPUT	s1,StartToneALong
+			
+	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
+	 			CALL  C,SpeakerOn
+
+	 	        FETCH	s3,AveStrtToneBMSB_I
+	 	        CALL	absval				;Get the magnitude
+	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
+	 	        FETCH	s3,AveStrtToneBMSB_Q
+	 			CALL	absval				;Get the magnitude
+	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
+	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
+;				SR0	s0					;Divide by 2 again
+;				SR0	s0					;Divide by 2 again
+	 	
+	 	        FETCH	s3,LongAveStrtToneBMSB_I
+	 	        CALL	absval				;Get the magnitude
+	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
+	 	        FETCH	s3,LongAveStrtToneBMSB_Q
+	 			CALL	absval				;Get the magnitude
+	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
+	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
+;Now s1 has long term average level and s0 has short term average value of start tone B (but 4 times smaller)
+				OUTPUT	s0,StartToneB
+				OUTPUT	s1,StartToneBLong
+
+	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
+	 			CALL  C,SpeakerOn
+
+	 	        FETCH	s3,AveStopToneAMSB_I
+	 	        CALL	absval				;Get the magnitude
+	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
+	 	        FETCH	s3,AveStopToneAMSB_Q
+	 			CALL	absval				;Get the magnitude
+	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
+	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
+;				SR0	s0					;Divide by 2 again
+;				SR0	s0					;Divide by 2 again
+	 	
+	 	        FETCH	s3,LongAveStopToneAMSB_I
+	 	        CALL	absval				;Get the magnitude
+	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
+	 	        FETCH	s3,LongAveStopToneAMSB_Q
+	 			CALL	absval				;Get the magnitude
+	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
+	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
+;Now s1 has long term average level and s0 has short term average value of stop tone A (but 4 times smaller)
+
+
+;				OUTPUT	s0,StopToneA
+
+;	Moved earlier			LOAD	s3,AveSignalMSB		   ;AveSignalMSB is actually a register!
+;				OUTPUT	s3,StopToneALong
+				
+;				OUTPUT	s1,StopToneALong
+
+	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
+	 			CALL  C,SpeakerOff
+
+	 	        FETCH	s3,AveStopToneBMSB_I
+	 	        CALL	absval				;Get the magnitude
+	 	        LOAD	s0,s3				;Abs value of ToneA_I in s0
+	 	        FETCH	s3,AveStopToneBMSB_Q
+	 			CALL	absval				;Get the magnitude
+	 	        ADD	s0,s3				;Abs value of ToneA_I +Q in s0
+	 			SRA	s0					;Divide by 2 to get carry back into the s0 register
+;				SR0	s0					;Divide by 2 again
+;				SR0	s0					;Divide by 2 again
+	 	
+	 	        FETCH	s3,LongAveStopToneBMSB_I
+	 	        CALL	absval				;Get the magnitude
+	 	        LOAD	s1,s3				;Abs value of ToneA_I in s0
+	 	        FETCH	s3,LongAveStopToneBMSB_Q
+	 			CALL	absval				;Get the magnitude
+	 	        ADD	s1,s3				;Abs value of ToneA_I +Q in s0
+	 			SL0	s1					;Multiply by 2 and assume the averaged value is small!
+;Now s1 has long term average level and s0 has short term average value of stop tone B (but 4 times smaller)
+;				OUTPUT	s0,StopToneB
+	;			OUTPUT	s1,StopToneBLong
+
+	 			COMPARE  s1,s0				;See if short term average is bigger than 4 times long term average (Carry will be set)
+	 			CALL  C,SpeakerOff
+	 	
+				
+				RETURN				
+
+
+;Does 16 bit signed accumulation of 8 bit signed value in s1 into s4/s5 which are recoverred from scratch pad pointed to by s2 (loading here the offset to the actual tone
+;dependent on how many times round the loop we are)
+DoAccumulate:	 ADD   s2,s6
+				 FETCH s4,(s2)			;Now Get AveSToneLSB_Is in s4 etc...
+				 SUB   s2,01				;step back to MSB
+				 FETCH s5,(s2)			;Get AveSToneMSB_Is in s5
+				 LOAD  s3,FF			;Assume s1 is negative and use s3 for sign extension
+				 COMPARE  s1,128'd			;if s1 is 128 or bigger, then it is negative (carry not set)
+				 JUMP  NC,negaccum
+				 LOAD  s3,00		  		;sign extend with zeros
+negaccum:		 ADD   s4,s1			;Accumulate into averageLsB
+				 ADDCY s5,s3				;do carry to add into upper byte (keeping carry from previous add!!)
+				 LOAD  s0,s5
+				 SRX   s0
+				 SRX   s0					;reduce value to subtract by factor 4 to increase integration time constant and gain.	
+				 ADDCY s0,00					;round up if necessary 		   	  		
+				 SUB   s4,s0
+				 LOAD  s3,FF			;Assume s5 is negative and use s3 for sign extension				
+				 COMPARE  s5,128'd				;is this a negative number?
+				 JUMP  NC,negdecrmnt
+				 LOAD  s3,00					;do this if s5 is positive (sign extension)
+negdecrmnt:		 SUB   s4,s0
+				 SUBCY s5,s3				;subtract 1/256						
+				 STORE s5,(s2)
+				 ADD   s2,01				;move down to LSB again
+				 STORE s4,(s2)			;update scratchpad values   	
+				 RETURN
+
+
+
+
+
+;Routine to do LO_I and LO_Q multiplications - LO value in s3 (enter with s3) and signal in s1 (recoverred here from s8) -> result in s1
+MultSigByLO:	COMPARE  s3,128'd
+				JUMP  NC, LOisNeg		  ;Jump out if sinewave val is negative
+BackFromLOPos:	LOAD  s7,00				  ;LO is not negative
+	
+BackFromLONeg:	LOAD  	s1,s8		  ;stick signal value back in s1
+				COMPARE  s3,04				  ;This is the ABSOLUTE value of the LO
+				CALL  	Z,MultiplyBy4
+				COMPARE  s3,03				  ;This is the ABSOLUTE value of the LO
+				CALL  	Z,MultiplyBy3
+				COMPARE  s3,02				  ;This is the ABSOLUTE value of the LO
+				CALL  	Z,MultiplyBy2
+				 
+				 ;if abs(LO)=1  do nothing
+				
+				 COMPARE  s7,01		  ;was the LO value negative?
+				 RETURN  NZ		  ;return if positive
+				 CALL  invertval	 ;invert sign of s1 if negative
+				 RETURN
+
+
+
+;Routine every 256 cycles to update longer average
+DolongAve:	    LOAD s2, AveStrtToneAMSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
+				ADD   s2,s6
+				FETCH s1,(s2)			;Now Get AveSToneMSB_Is in s1 etc...
+				ADD s2,01
+				FETCH s0,(s2)			;Now Get AveSToneLSB_Is in s0 etc...
+				SLA s0
+				ADDCY s1,00     ;should now be rounded correctly
+				
+				LOAD s2, LongAveStrtToneALSB_I	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
+				CALL 	DoAccumulate
+
+				LOAD s2, AveStrtToneAMSB_Q	 ;This is load not FETCH as s2 is loaded with the pointer value to the first scratchpad average register
+				ADD   s2,s6
+				FETCH s1,(s2)			;Now Get AveSToneMSB_Qs in s1 etc...
+				ADD s2,01
+				FETCH s0,(s2)			;Now Get AveSToneLSB_Qs in s0 etc...
+				SLA s0
+				ADDCY s1,00     ;should now be rounded correctly
+				
+	   	        LOAD s2, LongAveStrtToneALSB_Q
+				CALL 	DoAccumulate
+
+
+		  	   	RETURN
+
+
+;This inverts the sign of the LO sinewave to be positive, but notes this in a flag to take into account.
+LOisNeg:		 LOAD s7,01	  ;This means LO is negative
+				 CALL makeposval
+
+				 JUMP  BackFromLONeg
+				
+
+;Multiplies value of s1 by 4 (SL0 X2)
+MultiplyBy4:	SL0 s1
+				SL0 s1
+				RETURN
+
+MultiplyBy2:	SL0 s1
+				RETURN
+
+MultiplyBy3:	LOAD s4,s1
+				SL0 s1
+				ADD	s1,s4
+				RETURN
+
+
+
+;This routine aims to double the signed analoge value in s0,s1 by finding sign of the value and doubling if small, increasing magnitude by 32 if less than 95 but more than 32 then limiting to 127 if more than 95
+
+AudioDouble:  	   COMPARE s1,128'd
+				   JUMP	C,Posvalue
+;otherwise must be negative
+Negvalue:		   COMPARE	   s1,225'd		;256-31
+				   JUMP	   C,islessthanneg31
+				   SL0	   s0
+				   SLA	   s1			  ;double value
+				   RETURN
+				
+islessthanneg31:   COMPARE	   s1,193'd			;256-63
+				   JUMP	   C,islessthanneg63
+				   SUB	   s1,32'd
+				   RETURN
+				
+islessthanneg63:   SRX	   s1
+				   SRA	   s0				;half value
+				   SUB	   s1,64'd
+				   RETURN
+				   	
+
+Posvalue:		   COMPARE	   s1,32'd
+				   JUMP	   NC,ismorethan31
+				   SL0	   s0
+				   SLA	   s1			  ;double value
+				   RETURN
+				   
+ismorethan31:	   COMPARE	   s1,64'd
+				   JUMP	   NC,ismorethan63		  ;positive and 64 or greater
+				   ADD	   s1,32'd
+				   RETURN
+				   
+ismorethan63:	   SRX	   s1					  ;sign extension should be zero!
+				   SRA	   s0
+				   ADD	   s1,64'd
+				   RETURN
+				   	
+;-----------End Audio double
+
+
+
+;Divides 16 bit signed value in s0,s1 by 2.
+Divide2:			SRX		  s1
+		  	  		SRA		  s0
+					RETURN
+
+
+;SUB16bit:			SUB		  s8,s0
+;					SUBC	  s9,s1				;16 bit subtract					
+;					RETURN
+
+;ADD16bit:			ADD		  s8,s0
+;					ADDC	  s9,s1				;16 bit addition					
+;					RETURN
+
+
+
+TransmitAudio:			
+;					IN 	s2,Status
+;					AND	s2,2	 ;look at bit 1
+					
+;In this version switching to BT input is through external multiplexer to go through emphasis filter
+;					COMP s2,0	 ;True if BT signal present
+					
+;					JUMP NZ,SkipNoBT   ;keep value from ADC if flag set
+;					IN  s0,BTaudioLSB  ;Use BT values instead if present								
+;					IN  s1,BTaudioMSB
+;					CALL	AudioDouble		   ;increase volume 6 dB!  14/3/15
+
+
+SkipNoBT:									
+
+;At this point we have audio value to transmit in s1,s0 so can add a tone here
+;		 	   CALL  ADDsinewave			
+					
+;Nov 2014 - have reduced DSP AGC level, so shouldn't need to do this? -reinstate Feb2015
+	               SRX		s1				;halve value before FIR to keep I and Q below $30 limit after FIR for CORDIC
+	               SRA		s0
+
+;Store data in RAM
+;				   OUTPUT     s0,Data2archiveLSB 		
+;				   OUTPUT     s1,Data2archiveMSB
+
+
+				CALL      PerformFIR
+				;This should have decreased amplitude by about 6dB	
+				
+				OUTPUT     s0,Data2archiveMSB 		
+				OUTPUT     s1,Data2archiveLSB
+				
+
+
+						
+;need to make sure that s3/s2 and s1/s0 DO NOT EXCEED $3000, ie 48 in the MSBs!
+				   CALL	  cordic		  ;This is upsettng the AGC when sinectr used sB!
+
+
+				   SL0	  s0			  ;add 6dB 4/10/11
+				   SLA	  s1
+				   COMPARE	  s1,64'd	  ;see if it is not too big already
+				   JUMP	  NC,BiggerThan63	  ;Skip if too big
+				   SL0	  s0			  ;add 6dB 4/10/11
+				   SLA	  s1
+;added further 6dB Aug 2013
+	   		   	   COMPARE	  s1,64'd	  ;see if it is not too big already
+				   JUMP	  NC,BiggerThan63	  ;Skip if too big
+				   SL0	  s0			  ;add 6dB 4/10/11
+				   SLA	  s1
+
+
+				   		   	
+OutAmp:		
+
+;_______________________________
+;Test value by sending out to Uart - shift this section as required - but check s3 not used! Disable in GV44a to allow receipt of other values!
+;				   LOAD   s3,s1
+;				   SRX	  s3   	   	 	   ;make sure am not spoiling s3!!!!!
+;	                    OUT       s3, CmdToUser	  	;Send amp in 7 bits (divide by 2!) to user pico to send to UART
+;__________________________________
+
+
+
+				   OUTPUT	  s1,SSBAmp								;********************disable for beacon tests
+
+				   FETCH  s3,OldPhaseMSB
+				   FETCH  s2,OldPhaseLSB
+				   STORE  s5,OldPhaseMSB
+         		   STORE  s4,OldPhaseLSB						;s2,3 old phase, s4,5 new phase
+         		   OUTPUT s3,AudioPhaseMSB							  ;send old phase directly
+ 				   OUTPUT s2,AudioPhaseLSB							  ;send old phase directly
+ 				   SUB	  s4,s2
+ 				   SUBCY  s5,s3										  ;New phase-old phase
+ 				   SRX	  s5
+ 				   LOAD	  s3,s5										  ;divide MSB by2 and copy
+ 				   SRX	  s3
+ 				   SRX	  s3										  ;s5/4
+ 				   ADD	  s5,s3
+ 				   SRX	  s3
+ 				   SRX	  s3										  ;s5/16, s5 should now be 4/3rds of Phase shift/2^9, or 2/3rds of phase shift/2^8 (should be 2/3rds of s5/2^11) so need further 2^3 attenuaion)
+ 				   ADD	  s5,s3
+				   OUTPUT	  s5,PhaseIncrement				
+ 				   
+;					OUTPUT     s4,Data2archiveLSB							  ;Use this if want to store phase
+;					OUTPUT     s5,Data2archiveMSB
+
+					FETCH   s3, AGCvalue
+					OUTPUT	s3,StopToneA	   	   	   ;TEMP !!!!!!!!!!!!!!!! send AGC value to this position when transmitting
+			
+								
+				   JUMP      BackfromTransmitting
+
+BiggerThan63:	   COMPARE s1,129'd
+				   JUMP NC,BiggerThan128
+				   ADD	s1,64'd
+				   JUMP	OutAmp
+				   
+BiggerThan128:	   SR0	s1			;half value (127 max value)
+				   ADD	s1,128'd		;add 128 (gives 255 max)
+				   JUMP	OutAmp
+				
+
+;Enter with signed 16 bit value in s1,s0 and return magnitude in s3,s2
+Abs16Val:		   	LOAD  	s3,s1
+					LOAD	s2,s0
+					COMPARE      s1, 128'd
+					RETURN		  C
+					LOAD	  s3,00
+					LOAD	  s2,00
+					SUB		  s2,s0
+					SUBCY	  s3,s1	
+					RETURN
+
+absval:			    COMPARE      s3, 128'd
+                    CALL      NC, makeposval
+					RETURN
+
+
+; Turn negative value in s3 into a positive one (well will actualy make a positive value negative as well).
+makeposval:         LOAD      s4, 00
+                    SUB       s4, s3
+                    LOAD      s3, s4
+                    RETURN      
+;invert value - actually same as makeposval, but works on s1
+invertval:	  		LOAD      s4, 00
+                    SUB       s4, s1
+                    LOAD      s1, s4
+                    RETURN
+
+
+;Adds small amplitude roughly sinewave at 62.5Hz - not used (was to be used to add a sub-audio tone continuously)
+;ADDsinewave:		  FETCH	  s2,AGCcounter
+;					  AND	  s2,7
+;					  COMP     s2,0
+;					  JUMP	   NZ,constsinectr
+;					  ADD	   sinectr,1
+;					  COMP	   sinectr, endsine+1
+;					  JUMP	   NZ,constsinectr
+;					  LOAD	   sinectr,startsine
+;constsinectr:		  FETCH	   s3,sinectr					
+;					  ADD	   s1,s3						;and hope it doesn't overflow!
+					
+					
+					
+;					  RET
+
+
+;Feb 2013 icrease number of AGC steps factor 2 and another factor 2 July 2013 (now granularity 1.5dB)
+; increment attenuation
+increaseAGC:        COMPARE      s3, 63'd  		   ; was44
+                    RETURN       Z                   ; don't do anything if already 63 (was 44 (was 22, before that 11))
+
+ 
+                    LOAD      AveSignalUSB, AGCInitial   ; set signal averager to moderate level
+;                    LOAD      AveSignalUSB, AGClowthreshold       ; set signal averager to moderate level
+;                    ADD       AveSignalUSB, AGCuppthreshold       ; set signal averager to moderate level
+;					SR0       AveSignalUSB
+
+                    ADD       s3, 1'd               ; so yes signal really has been too big for too long!
+		;           LOAD      s5, s3  ->this was just used when sending value to UART?
+
+                    RETURN       
+
+;increase AGCvalue by 4 to give extra 6dB
+increaseAGC2:	CALL increaseAGC
+				CALL increaseAGC
+				CALL increaseAGC
+				CALL increaseAGC
+				RETURN
+
+increaseAGC4:	CALL increaseAGC2
+				CALL increaseAGC2
+				RETURN
+
+
+; decrement attenuation
+decreaseAGC:    COMPARE      s3, 00	  	   	   ; was232
+                RETURN       Z                   ; don't do anything if already  0   (was 232 ie -24 (was 244, before that 250 ie -6) )	
+
+				;				LOAD      s2,AveSignalMSB - this didn't seem to do anything (A0)
+;		    	CALL     increase1_5dB
+
+                    LOAD      AveSignalUSB, AGCInitial   ; set signal averager to moderate level
+;                    LOAD      AveSignalUSB, AGClowthreshold       ; set signal averager to moderate level
+;                    ADD       AveSignalUSB, AGCuppthreshold       ; set signal averager to moderate level
+;					SR0       AveSignalUSB
+
+                SUB       s3, 01               ; so yes signal realy has been too small for too long!
+				
+				; LOAD      s5, s3
+				; CALL      Export2User
+
+                RETURN       
+
+decreaseAGC2: 	   CALL decreaseAGC
+				   CALL decreaseAGC
+                   CALL decreaseAGC
+				   CALL decreaseAGC
+
+				   RETURN
+
+
+
+; AGC takes 24 bit value, MSB in s2, LSB in s0 and returns normalised 16 bit value in s1,s0 using AGC value from s3
+;AGC value in s3 should vary  0-63 in this version - higher value is higher attenuation so use higher significant bits on input MUX (4 bits - 16 inputs)
+; This routine can also be use for the volume setting if value put in s3 ????????
+AGC:   		   	   	SRX		  s3   	 			  ;divide s3 by 2 to get last AGC and put last bit into carry
+					CALL	  C,decrease1_5dB		  ;if last bit set then reduce by 3dB
+					SRX		  s3   	 			  ;divide s3 by 2 to get old AGC and put last bit into carry
+					CALL	  C,decrease3dB		  ;if last bit set then reduce by 3dB
+
+	   		   	    OUTPUT		  s3,MUXport		  ;Now simply use remaining 4 bits to drive the MUX
+	   		   	    RETURN
+                    
+;AGCloop:            COMPARE      s3, 00
+ ;                   RETURN       Z                   ; escape if AGC value zero
+  ;                  SRX       s2
+   ;                 SRA       s1
+    ;                SRA       s0
+     ;               SUB       s3, 1
+      ;              JUMP      AGCloop
+
+;negAGC:             COMP      s3, 0
+;					RET       Z                   ; escape if AGC value zero
+ ;                   SL0       s0				  ;increase 24 bit value by 6dB
+  ;                  SLA       s1
+   ;                 SLA       s2
+    ;                ADD       s3, 1
+     ;               JUMP      negAGC
+
+;this decreases value in (not s2),s1,s0 by factor 0.6875 (roughly 1/sqrt(2)) s2 not used with external MUX
+decrease3dB:        SRX       s1
+                    SRA       s0
+					LOAD	  s4,s0
+					LOAD	  s5,s1
+					
+					SRX       s5
+                    SRA       s4
+					SRX       s5
+                    SRA       s4
+					ADD		  s0,s4
+					ADDCY	  s1,s5
+					SRX       s5
+                    SRA       s4
+					ADD		  s0,s4
+					ADDCY	  s1,s5
+					
+					
+					RETURN
+
+;multiply by 0.875 - modified for using only s1,s0
+decrease1_5dB:      SRX       s1
+                    SRA       s0
+					LOAD	  s4,s0
+					LOAD	  s5,s1
+					SRX       s5
+                    SRA       s4
+					ADD		  s0,s4
+					ADDCY	  s1,s5
+					SRX       s5
+                    SRA       s4
+					ADD		  s0,s4
+					ADDCY	  s1,s5
+					
+					
+					RETURN
+					
+;multiply s2 by factor 1.25 (only used for AveSignalMSB) (not needed?)
+;increase1_5dB:      LOAD	  s6,s2
+;					SRX       s6
+ ;                   SRX       s6
+  ;                  ADD 	  s2,s6
+;										
+;					RET
+
+                    
+;This is never called???????????????????
+AGCtest:             LOAD	  s3,08
+					 LOAD	  s0,s1
+					 LOAD	  s1,s2
+					 RETURN
+
+;This is never called???????????????????
+AGClooptst:         COMPARE   s3, 00
+                    RETURN    Z                   ; escape if AGC value zero
+                    SRX       s2
+                    SRA       s1
+                    SRA       s0
+                    SUB       s3, 01
+                    JUMP      AGClooptst
+
+
+
+; Routine to perform FIR takes new signal value in s1,s0 (s1 is MSB) and puts into scratch buffer and then outputs new filterred values for I in s1,s0 and Q in s3,s2
+; First store latest value then increment LVptr
+;OK Sept 2010
+;reasonable match between I and Q components (within ~1dB), but about 6dB attenuation from input - OK.
+PerformFIR:         OUTPUT       s1, SignalMSB
+                    OUTPUT       s0, SignalLSB
+
+
+                    FETCH     s4, LVPtr           ; value of the previous latest value
+                    ADD       s4, 02               ; advance LVptr
+                    COMPARE   s4, HistoryStart42	; + 42
+                    CALL      NC, resetLVptr      ; if gone past end of buffer reset pointer to start
+
+                    STORE     s4, LVPtr           ; update incremented value of LVptr (by step +2)
+                    STORE     s1, (s4)              ; Store signalMSB at LVptr in scratch
+                    ADD       s4, 01
+                    STORE     s0, (s4)              ; Store signalLSB at LVptr+1 in scratch
+                    SUB       s4, 01               ; return to LVptr
+
+
+
+                    LOAD      sA, 00               ; Reset the register used for the difference between LVptr and Rptr (diff)
+
+
+
+                    STORE     sA, IaccuLSB
+                    STORE     sA, IaccuMSB
+                    STORE     sA, QaccuLSB
+                    STORE     sA, QaccuMSB        ; Reset all accumulators
+
+
+; now start filter with roving pointer in s5 starting at LVptr
+; LOAD      s5, s4
+                    CALL      UpdateRptr          ; this should be equivalent to previous line!
+
+                    LOAD      s7, coeffI0MSB      ; Smallest coefficients of I FIR - load values to go to multiplier input.
+                    LOAD      s6, coeffI0LSB
+                    CALL      Ibussiness
+
+                    LOAD      s7, coeffQ0MSB      ; Smallest coefficients of Q FIR
+                    LOAD      s6, coeffQ0LSB
+                    CALL      Qbussiness
+
+                    LOAD      s7, coeffI1MSB      ; coefficient of I FIR
+                    LOAD      s6, coeffI1LSB
+                    CALL      Ibussiness
+
+                    LOAD      s7, coeffQ1MSB      ; coefficient of Q FIR
+                    LOAD      s6, coeffQ1LSB
+                    CALL      Qbussiness
+
+                    LOAD      s7, coeffI2MSB      ; coefficient of I FIR
+                    LOAD      s6, coeffI2LSB
+                    CALL      Ibussiness
+
+                    LOAD      s7, coeffQ2MSB      ; coefficient of Q FIR
+                    LOAD      s6, coeffQ2LSB
+                    CALL      Qbussiness
+
+                    LOAD      s7, coeffI3MSB      ; coefficient of I FIR
+                    LOAD      s6, coeffI3LSB
+                    CALL      Ibussiness
+
+                    LOAD      s7, coeffQ3MSB      ; coefficient of Q FIR
+                    LOAD      s6, coeffQ3LSB
+                    CALL      Qbussiness
+
+                    LOAD      s7, coeffI4MSB      ; coefficient of I FIR
+                    LOAD      s6, coeffI4LSB
+                    CALL      Ibussiness
+
+                    LOAD      s7, coeffQ4MSB      ; coefficient of Q FIR
+                    LOAD      s6, coeffQ4LSB
+                    CALL      Qbussiness
+
+                    LOAD      s7, coeffI5MSB      ; half of middle coefficient of I FIR
+                    LOAD      s6, coeffI5LSB
+                    CALL      Ibussiness          ; Roving pointer is advanced an 11th time but is reset before being used!
+
+                    FETCH     s0, IaccuLSB
+                    FETCH     s1, IaccuMSB
+                    FETCH     s2, QaccuLSB
+                    FETCH     s3, QaccuMSB
+
+
+                    RETURN                           ; return from PerformFIR			
+
+
+; These assume coefficient is in s6,7 (LSB,MSB)
+Ibussiness:         CALL      doIplus
+                    CALL      conjugateDiff       ; Roving, difference pointer in sA sent to conjugate value and update roving pointer s5
+                    CALL      doIplus
+                    CALL      conjugateDiff       ; Return difference pointer in sA from its conjugate value
+                    CALL      AdvanceRptr         ; This is relative shift to roving pointer (0->10 x2 ie 20)
+                    RETURN       
+
+
+Qbussiness:         CALL      doQplus
+                    CALL      conjugateDiff       ; Roving, difference pointer in sA sent to conjugate value, also update roving pointer.
+                    CALL      doQminus
+                    CALL      conjugateDiff       ; Roving, difference pointer in sA sent to conjugate value, should go back to value before calling this function.
+                    CALL      AdvanceRptr         ; This uses relative shift to roving pointer (0->10x2 ie 20), sA used for difference value.
+                    RETURN       
+
+; These assume coefficient is in s6,7 (LSB,MSB) for doMult, so make sure it doesn't pollute it for the next time!
+doIplus:            CALL      doMult
+                    FETCH     s0, IaccuLSB
+                    FETCH     s1, IaccuMSB
+
+                    ADD       s0, s8
+                    ADDCY     s1, s9
+                    STORE     s0, IaccuLSB
+                    STORE     s1, IaccuMSB
+
+                    RETURN       
+
+doQplus:            CALL      doMult
+                    FETCH     s0, QaccuLSB
+                    FETCH     s1, QaccuMSB
+
+                    ADD       s0, s8
+                    ADDCY     s1, s9
+                    STORE     s0, QaccuLSB
+                    STORE     s1, QaccuMSB
+
+                    RETURN       
+
+doQminus:           CALL      doMult
+                    FETCH     s0, QaccuLSB
+                    FETCH     s1, QaccuMSB
+
+                    SUB       s0, s8
+                    SUBCY     s1, s9
+                    STORE     s0, QaccuLSB
+                    STORE     s1, QaccuMSB
+
+                    RETURN       
+
+
+; History signal is first output to SignalMSB and SignalLSB, the signal is then multiplied by the coefficient (provided in s6,7 - LSB,MSB) and the result is returned in s8,9 (LSB,MSB)
+doMult:             CALL  	  GetRovingHistoryValues
+					OUTPUT    s1, SignalMSB
+                    OUTPUT    s0, SignalLSB       ; Historical signal sent to multiplier
+
+                    OUTPUT    s7, CoeffMSB
+                    OUTPUT    s6, CoeffLSB
+                    LOAD      s0, 00
+                    LOAD      s0, 00
+                    LOAD      s0, 00               ; wait a bit (8 clock cycles enough?)
+                    LOAD      s0, 00
+                    INPUT     s9, MltplyMSB
+                    INPUT     s8, MltplyLSB
+                    RETURN       
+
+
+GetRovingHistoryValues:	FETCH     s1, (s5)              ; Historical SignalMSB
+                    ADD       s5, 01
+                    FETCH     s0, (s5)              ; Historical SignalLSB
+                    SUB       s5, 01               ; return s5 vlue as there will be another mult before updating s5!!
+					RETURN
+
+
+
+; To reset LVptr to start of history rolling buffer space. LVptr is 'Last Value Pointer'
+resetLVptr:         LOAD      s4, HistoryStart
+                    RETURN       
+
+; and Rptr (Rptr is 'Roving Pointer'), next value (back 2 places), using advance of diff (sA) diff takes even values 0-40 inclusive (10 steps, ie 11 values, should never go beyond!, at each value conjugate point is also used. 11 value is diff=20 repeats itself at conjugate point)
+AdvanceRptr:        ADD       sA, 02               ; advance diff (goes from 0 to 20)
+                    CALL      UpdateRptr
+                    RETURN       
+
+; uses value of diff to update value of Rptr
+UpdateRptr:         LOAD      s5, s4              ; put LVptr in Rptr
+                    SUB       s5, sA              ; take off value of diff (sA)
+                    COMPARE   s5, HistoryStart
+
+                    RETURN       NC                  ; if not gone below bottom of buffer return!, else....
+
+                    ADD       s5, 42'd              ; send up again
+                    RETURN      
+
+; - acts on diff (sA)
+conjugateDiff:      LOAD      s0, 40'd
+                    SUB       s0, sA              ; 40-sA
+                    LOAD      sA, s0              ; so sA is conjugate eg: 0->40,40->0, 20->20 etc
+                    CALL      UpdateRptr          ; calculate corresponding Rptr
+                    RETURN       
+
+; the negative case means when the roving ptr is less than LVptr - is it done OK above 10 lines? diff is always positive (Rptr less than LVptr)
+; conjugateneg:
+; RET
+
+
+
+; Takes value in s5 and converts to 2 ascii codes which are sent to the user picoblaze.
+Export2User:        CALL      Byte2Chars
+                    OUTPUT    s6, CmdToUser
+                    OUTPUT    s7, CmdToUser
+                    LOAD      s0, 13'd              ; terminate with CR
+                    OUTPUT    s0, CmdToUser
+                    LOAD      s0, 10'd              ; and with LF
+                    OUTPUT    s0, CmdToUser
+                    RETURN       
+
+; Takes 16 bit value in s6,s7 (MSB,LSB) and outputs to the archive memory (write enabled and selected by user picoblaze)
+ArchiveData:        OUTPUT    s6, Data2archiveLSB
+                    OUTPUT    s7, Data2archiveMSB
+                    RETURN      
+
+
+; Frequency works out the phase increment - (this is to ~7 bit precission, but using LSB could get 8 bit?)
+; Takes phase in s4 (and s5) and uses old phase value from scratchpad (which is then updated). The phase increment is returned in s4.
+Frequency:          FETCH     s0, OldPhaseMSB
+                    STORE     s4, OldPhaseMSB
+                    SUB       s4, s0
+                    RETURN       
+
+
+; CORDIC  Takes I in s0(LSB)and s1(MSB) and Q in s2,s3 and returns the amplitude in s0,s1 and the phase in s4,s5. s8 is the loop counter
+; Useable range is for I and Q up to about +/-$3000
+
+cordic:	  		   	LOAD      s4, 00
+                    LOAD      s5, 00
+
+                    COMPARE   s1, 128'd
+                    CALL      NC, rotate90        ; if I negative then need to bring back into RH 2 quadrants.
+; now enter loop
+
+                    LOAD      s8, 00              ; counter of times to iterate.
+cordicloop:         LOAD      s7, s1              ; temporary store for I
+                    LOAD      s6, s0              ; temp store
+
+                    COMPARE   s3, 128'd           ; is Q negative?
+                    JUMP      NC, posrotate       ; if negative rotate positive
+negrotate:          LOAD      sA, s2
+                    LOAD      sB, s3              ; put Q into working registers
+                    CALL      shift               ; shift Q by the amount in s8
+                    ADD       s0, sA              ; add shifted Q to I
+                    ADDCY     s1, sB
+                    LOAD      sA, s6              ; prepare working registers (sA,sB) with original value of I
+                    LOAD      sB, s7
+                    CALL      shift
+                    SUB       s2, sA
+                    SUBCY     s3, sB
+                    CALL      GetPhaseIncrement
+                    SUB       s4, sA
+                    SUBCY     s5, sB
+                    JUMP      testcordicend
+posrotate:          LOAD      sA, s2
+                    LOAD      sB, s3              ; put Q into working registers
+                    CALL      shift               ; shift Q by the amount in s8
+                    SUB       s0, sA              ; add shifted Q to I
+                    SUBCY     s1, sB
+                    LOAD      sA, s6              ; prepare working registers with original value of I
+                    LOAD      sB, s7
+                    CALL      shift
+                    ADD       s2, sA
+                    ADDCY     s3, sB
+                    CALL      GetPhaseIncrement
+                    ADD       s4, sA
+                    ADDCY     s5, sB
+testcordicend:      ADD       s8, 01
+                    COMPARE   s8, m_plus_1 		;m + 1
+                    JUMP      C, cordicloop
+                    RETURN       
+
+; routine to lookup from the cordic look up table (scratchpad), the phase increment - stored as 8 bits at the location pointed to be s8, returned as 16 bits in sA and sB
+; sB is MSB
+GetPhaseIncrement:  FETCH     sB, (s8)
+                    SR0       sB
+                    SRA       sA
+                    SR0       sB
+                    SRA       sA
+                    SR0       sB
+                    SRA       sA                  ; This multiplies the 8 bit stored value by 32 so that max scratchpad value 255->255*32 equivalent to 44.82degrees
+                    RETURN       
+
+shift:              LOAD      s9, s8
+shiftloop:          COMPARE   s9, 00
+                    RETURN    Z
+                    SUB       s9, 01
+                    SRX       sB
+                    SRA       sA
+                    JUMP      shiftloop
+
+
+
+rotate90:           LOAD      s7, s1              ; temporary store for I
+                    LOAD      s6, s0              ; temp store
+
+                    COMPARE   s3, 128'd           ; is Q negative?
+                    JUMP      NC, add90           ; if negative add 90
+sub90:              LOAD      s1, s3
+                    LOAD      s0, s2              ; I=Q
+                    LOAD      s2, 00
+                    LOAD      s3, 00
+
+                    SUB       s2, s6
+                    SUBCY     s3, s7              ; Q=-I
+                    SUB       s4, half_pi_LSB
+                    SUBCY     s5, half_pi_MSB
+                    RETURN       
+
+add90:              LOAD      s1, 00
+                    LOAD      s0, 00
+                    SUB       s0, s2
+                    SUBCY     s1, s3              ; I=-Q
+
+                    LOAD      s2, s6
+                    LOAD      s3, s7              ; Q=I
+                    LOAD      s4, half_pi_LSB
+                    LOAD      s5, half_pi_MSB
+                    RETURN       
+
+Transmitmode:       FETCH     s1, State
+                    OR        s1, 02
+                    STORE     s1, State           ; set bit 1
+                    
+                    FETCH      s1,AGCvalue
+                    STORE	  s1,AGCvalueRX
+                    FETCH	  s1,AGCvalueTX		  ;recovers last used value for AGCvalur in this mode
+                    STORE      s1,AGCvalue
+                    RETURN       
+
+;Streammode:			CALL Transmitmode
+;					FETCH     s1, State
+ ;                   OR        s1, 4
+  ;                  STORE     s1, State           ; set bit 2
+;					RET
+                    	
+;GetUartValues:		CALL      Get2Chars			  ;Changed name of this routine
+;					LOAD	  s1,$AA			  ;rough value
+;					LOAD	  s2,s5				  ;now put into top byte
+;					SRX		  s2
+;					SRA		  s1				  ;divide signal by 2
+;					SRX		  s2
+;					SRA		  s1				  ;divide signal by 2 again
+;					LOAD 	  s0,$AA				  ;set lowest bits to rough value
+;				    RET
+					
+
+
+GrabTXAGCvalue:     FETCH     s1,AGCvalue
+                    STORE	  s1,AGCvalueTX
+					RETURN
+
+
+Receivemode:        FETCH     s1, State
+                    AND       s1, 253'd 			; 255 - 2
+                    STORE     s1, State           ; reset bit 1
+                    FETCH     s1,AGCvalue
+                    STORE	  s1,AGCvalueTX
+                    FETCH	  s1,AGCvalueRX		  ;recovers last used value for AGCvalur in this mode
+                    STORE     s1,AGCvalue
+                    RETURN
+
+BlockDSPpico:       LOAD      s1, 240'd
+                    OUTPUT    s1, SSBAmp          ; Set signal amp to high
+                    LOAD 	  s1,00
+					OUTPUT	  s1,PhaseIncrement				;Make sure phase doesn't wander
+                    INPUT     s0, Command         ; Check if FIFO character present
+                    COMPARE   s0, 128'd           ; is there a character?
+                    JUMP      NC, BlockDSPpico	  ; no command received so carry on blocking
+					CALL      GetFifoChar		  ;is command so get charcter
+                    
+                    
+                    COMPARE   s0, 82'd            ; character R
+                    RETURN    Z	  				  ;escape when R received from User Pico
+
+					JUMP	 BlockDSPpico
+
+
+
+
+; Get fifo command and act on it.
+Respond2Fifo:
+;			 	   	FETCH  	  s0,State
+;					AND		  s0,04
+;					COMP	  s0,04	 	 		  ;is this stream mode
+;					RETURN Z					  ;if so then stick (no backing out!)
+
+			 	    CALL      GetFifoChar
+;					COMPARE	  s0,51'd		 		  ;character 3
+;					CALL	  Z,Streammode
+					COMPARE   s0, 50'd              ; character 2
+                    CALL      Z, GrabTXAGCvalue	  ;need to get this before userpico sends warble
+
+                    COMPARE   s0, 49'd              ; character 1
+                    CALL      Z, Transmitmode
+                    COMPARE   s0, 48'd              ; character 0
+                    CALL      Z, Receivemode
+                    COMPARE   s0, 71'd              ; character G (request for AGCvalue info from userpico)
+                    CALL      Z, SendGParamBack
+                    COMPARE   s0, 83'd              ; character S (request for AVEsignal info from userpico)
+                    CALL      Z, SendSParamBack
+
+                    COMPARE   s0, 66'd              ; character B (block)
+                    CALL      Z, BlockDSPpico
+                    
+                    
+
+                    RETURN       
+
+
+
+;This can be adjusted for de-bugging AGCvalue
+SendGParamBack:     FETCH     s5, AGCvalue
+                    CALL      Export2User
+                    RETURN       
+
+;This can be adjusted for de-bugging AVEsignal
+SendSParamBack:     LOAD     s5, AveSignalUSB
+                    CALL      Export2User
+                    RETURN
+
+; Routine to recover a character from the FIFO in s0
+GetFifoChar:        LOAD      s0, AckFIFO
+                    OUTPUT    s0, Controlbits
+                    LOAD      s0, AckFIFO         ; Wait
+
+                    INPUT     s0, Command         ; now get my character
+                    AND       s0, 7F             ; mask off top bit
+                    RETURN       
+
+
+; routine to look at command input and recover 2 characters and return the byte they represent in s5.
+Get2Chars:          INPUT     s6, Command
+                    COMPARE   s6, 128'd           ; if greater than 128, then no character
+                    JUMP      NC, Get2Chars
+                    CALL      GetFifoChar
+                    LOAD      s6, s0
+
+
+Get2ndChar:         INPUT     s7, Command
+                    COMPARE   s7, 128'd           ; if greater than 128, then no character
+                    JUMP      NC, Get2ndChar
+                    CALL      GetFifoChar
+                    LOAD      s7, s0
+
+                    JUMP      Chars2Byte
+
+
+
+
+; Routine to take ascii codes in s6 and s7 and return a byte in s5 given by this character representation
+Chars2Byte:         LOAD      s8, s6
+                    CALL      Get4bits
+                    LOAD      s5, s8
+                    SL0       s5
+                    SL0       s5
+                    SL0       s5
+                    SL0       s5                  ; put these 4 bits to MSBs
+                    LOAD      s8, s7
+                    CALL      Get4bits
+                    ADD       s5, s8
+                    RETURN       
+
+; This routine takes an ascii code in s8 and returns a 4 bit value in s8
+Get4bits:           COMPARE   s8, 60'd           ; if character is 0-9 it is less than 60, if it is A-F then it is greater than 60
+                    JUMP      C, char0_9
+                    SUB       s8, 55'd            ; assumes hex codes A-F are in capitals!!, A (code 65) gives 10...
+                    AND       s8, 0F             ; make sure only return 4 bits
+                    RETURN       
+
+char0_9:            SUB       s8, 48'd
+                    AND       s8, 0F             ; make sure only return 4 bits
+                    RETURN      
+
+
+; takes data in s5 and returns two ascii codes in s6,s7 (s7 is character for lower 4 bits)
+Byte2Chars:         LOAD      s8, s5              ; assumes 8 bit data is in s5
+
+                    SR0       s5
+                    SR0       s5
+                    SR0       s5
+                    SR0       s5                  ; get first hex character
+                    CALL      GetChar
+                    LOAD      s6, s5              ; first ascii char
+                    LOAD      s5, s8
+                    AND       s5, 0F
+                    CALL      GetChar             ; send to LCD or UART
+                    LOAD      s7, s5              ; second ascii char
+                    RETURN       
+
+; routine to convert 4bit value in s5 to an ascii code, returned in s5
+GetChar:            SUB       s5, 10'd            ; Test if s5 greater than 9
+                    JUMP      C, is_0_9           ; Hex character is 0_9
+                    ADD       s5, 65'd            ; offset for Ascii code 'A'
+                    RETURN       
+is_0_9:             ADD       s5, 10'd            ; return to range 0-9
+                    ADD       s5, 48'd            ; offset to Ascii code for '0'
+                    RETURN       
+
+
+
+
+
+
+; Registers used s0, s1, s2, s3, s4 and s5.
+; 
+delay_1s:           LOAD      s5, 00               ; clear cycle counter
+                    LOAD      s4, 00
+wait_1s:            CALL      delay_1ms
+                    ADD       s4, 01               ; increment cycle counter
+                    ADDCY     s5, 00
+                    COMPARE   s4, count_1000_lsb  ; test for 1000ms
+                    JUMP      NZ, wait_1s
+                    COMPARE   s5, count_1000_msb
+                    JUMP      NZ, wait_1s
+                    RETURN       
+; 
+; Delays of approximately 200ms and 300ms used for LCD display scrolling
+; 
+; 
+; Registers used s0, s1, s2, s3 and s4.
+; 
+delay_300ms:        CALL      delay_100ms
+delay_200ms:        CALL      delay_100ms
+                    CALL      delay_100ms
+                    RETURN       
+; 
+; Delay of approximately 100ms used for switch debounce
+; 
+; Registers used s0, s1, s2, s3 and s4.
+; 
+delay_100ms:        LOAD      s4, 64             ; repeat 1ms delay 100 times
+wait_100ms:         CALL      delay_1ms
+                    SUB       s4, 01
+                    JUMP      NZ, wait_100ms
+                    RETURN       
+; 
+; Delay of approximately 1ms required by LCD display
+; 
+; Registers used s0, s1, s2 and s3.
+; 
+delay_1ms:          LOAD      s3, 00               ; clear cycle counter
+                    LOAD      s2, 00
+wait_1ms:           CALL      delay_1us
+                    ADD       s2, 01               ; increment cycle counter
+                    ADDCY     s3, 00
+                    COMPARE   s2, count_1000_lsb  ; test for 1000us
+                    JUMP      NZ, wait_1ms
+                    COMPARE   s3, count_1000_msb
+                    JUMP      NZ, wait_1ms
+                    RETURN       
+; 
+; Delay of approximately 50us required by LCD display
+; 
+; Registers used s0 and s1.
+; 
+delay_50us:         LOAD      s1, 50'd            ; repeat 1us delay 50 times
+wait_50us:          CALL      delay_1us
+                    SUB       s1, 01
+                    JUMP      NZ, wait_50us
+                    RETURN       
+
+; Delay of approximately 1us used to provide timing reference for
+; LCD operations. This must be adjusted to reflect the clock
+; applied to KCPSM3. The provided code is for a 50MHz clock rate.
+; 
+; The software delay loop is formed using register s0. This register
+; must be loaded with an integer value close to the result of....
+; 
+; value =  (clock_rate - 4)/4          Where 'clock_rate' is in MHz
+; 
+; So for a 50MHz clock the value is (50-4)/4 = 11.5 and 12 would be used.
+; For clock rates below 8MHz the value of 1 must be used and the I2C bus
+; operation will become lower than the 100KHz target intended.
+; 
+; Register used s0.
+; 
+
+delay_1us:          LOAD      s0, delay_1us_constant; delay value of 12 decimal for a 50MHz clock
+wait_1us:           SUB       s0, 01
+                    JUMP      NZ, wait_1us
+                    RETURN       
+; 
+; 
+
+

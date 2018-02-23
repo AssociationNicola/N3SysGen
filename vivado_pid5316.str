@@ -1,0 +1,671 @@
+/*
+
+Vivado v2016.2 (64-bit)
+SW Build 1577090 on Thu Jun  2 16:32:35 MDT 2016
+Process ID: 5316
+
+Current time: 	12/3/16 3:07:42 PM GMT
+Time zone: 	Greenwich Mean Time (Europe/London)
+
+OS: DISTRIB_ID=Ubuntu
+Version: 3.19.0-42-generic
+Architecture: amd64
+Available processors (cores): 2
+
+DISPLAY: :0
+Screen size: 1280x800
+Screen resolution (DPI): 96
+Available screens: 1
+Default font: family=Dialog,name=Dialog,style=plain,size=12
+
+Java version: 	1.8.0_66 64-bit
+Java home: 	/opt/Xilinx16/Vivado/2016.2/tps/lnx64/jre
+
+User name: 	graham
+User home directory: /home/graham
+User working directory: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3SysGen
+User country: 	GB
+User language: 	en
+User locale: 	en_GB
+
+RDI Base root directory: /opt/Xilinx16/Vivado
+RDI Data directory: /opt/Xilinx16/Vivado/2016.2/data
+RDI Bin directory: /opt/Xilinx16/Vivado/2016.2/bin
+
+Vivado preferences path: /home/graham/.Xilinx/Vivado/2016.2/vivado.ini
+Vivado layouts directory: /home/graham/.Xilinx/Vivado/2016.2/layouts
+
+GUI allocated memory:	168 MB
+GUI max memory:		3,052 MB
+Engine allocated memory: 4,822 MB
+
+*/
+
+// TclEventType: START_GUI
+// Tcl Message: start_gui 
+// [GUI Memory]: 31 MB (+30144kb) [00:00:17]
+// [Engine Memory]: 4,822 MB (+4904380kb) [00:00:17]
+// HMemoryUtils.trashcanNow. Engine heap size: 4,822 MB. GUI used memory: 22 MB. Current time: 12/3/16 3:07:44 PM GMT
+selectList(PAResourceEtoH.GettingStartedView_RECENT_PROJECTS, "/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.xpr", 0); // q:v (JViewport:JComponent, cv:JFrame)
+// bL:g (cv:JFrame):  Open Project : addNotify
+// Opening Vivado Project: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.xpr. Version: Vivado v2016.2 
+// TclEventType: DEBUG_PROBE_SET_CHANGE
+// [GUI Memory]: 35 MB (+2267kb) [00:00:51]
+// HMemoryUtils.trashcanNow. Engine heap size: 4,846 MB. GUI used memory: 22 MB. Current time: 12/3/16 3:08:14 PM GMT
+// Tcl Message: open_project /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.xpr 
+// TclEventType: MSGMGR_MOVEMSG
+// TclEventType: FILESET_TARGET_UCF_CHANGE
+// TclEventType: FILE_SET_NEW
+// TclEventType: RUN_COMPLETED
+// TclEventType: FILESET_TARGET_UCF_CHANGE
+// TclEventType: RUN_COMPLETED
+// TclEventType: FILESET_TARGET_UCF_CHANGE
+// TclEventType: RUN_CURRENT
+// HMemoryUtils.trashcanNow. Engine heap size: 4,866 MB. GUI used memory: 22 MB. Current time: 12/3/16 3:08:39 PM GMT
+// Elapsed time: 38 seconds
+selectButton(RDIResource.ProgressDialog_CANCEL, "Cancel"); // a:JButton (JPanel:JComponent, bL:g)
+// Elapsed time: 28 seconds
+selectButton(RDIResource.ProgressDialog_CANCEL, "Cancel"); // a:JButton (JPanel:JComponent, bL:g)
+// HMemoryUtils.trashcanNow. Engine heap size: 4,915 MB. GUI used memory: 22 MB. Current time: 12/3/16 3:09:24 PM GMT
+// TclEventType: IP_LOCK_CHANGE
+// TclEventType: PROJECT_CLOSE
+// HMemoryUtils.trashcanNow. Engine heap size: 4,935 MB. GUI used memory: 22 MB. Current time: 12/3/16 3:09:44 PM GMT
+// Tcl Message: INFO: [Common 17-344] 'open_project' was cancelled 
+// Elapsed time: 25 seconds
+dismissDialog("Open Project"); // bL:g (cv:JFrame)
+// Elapsed time: 65 seconds
+selectList(PAResourceEtoH.GettingStartedView_RECENT_PROJECTS, "/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.xpr", 0); // q:v (JViewport:JComponent, cv:JFrame)
+// bL:g (cv:JFrame):  Open Project : addNotify
+// Opening Vivado Project: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.xpr. Version: Vivado v2016.2 
+// TclEventType: MSGMGR_MOVEMSG
+// TclEventType: FILESET_TARGET_UCF_CHANGE
+// TclEventType: FILE_SET_NEW
+// TclEventType: RUN_COMPLETED
+// TclEventType: FILESET_TARGET_UCF_CHANGE
+// TclEventType: RUN_COMPLETED
+// TclEventType: FILESET_TARGET_UCF_CHANGE
+// TclEventType: RUN_CURRENT
+// [GUI Memory]: 41 MB (+4096kb) [00:03:30]
+// HMemoryUtils.trashcanNow. Engine heap size: 4,961 MB. GUI used memory: 22 MB. Current time: 12/3/16 3:10:59 PM GMT
+// TclEventType: IP_LOCK_CHANGE
+// TclEventType: PROJECT_NEW
+// [GUI Memory]: 55 MB (+12736kb) [00:03:46]
+// [GUI Memory]: 59 MB (+1819kb) [00:03:53]
+// TclEventType: FILE_SET_OPTIONS_CHANGE
+// Tcl Message: open_project /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.xpr 
+// Tcl Message: Scanning sources... Finished scanning sources 
+// Tcl Message: INFO: [IP_Flow 19-234] Refreshing IP repositories INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/graham/Dropbox/SysgenOutput/TE0722/ip'. INFO: [IP_Flow 19-1700] Loaded user IP repository '/home/graham/Dropbox/SysgenOutput/TE0722/ToneDetect/ip'. INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/Xilinx16/Vivado/2016.2/data/ip'. 
+// HMemoryUtils.trashcanNow. Engine heap size: 5,060 MB. GUI used memory: 45 MB. Current time: 12/3/16 3:11:18 PM GMT
+// TclEventType: FILE_SET_OPTIONS_CHANGE
+// Project name: N3Z_TD_FIFO; location: /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO; part: xc7z010clg225-1
+// Tcl Message: open_project: Time (s): cpu = 00:00:31 ; elapsed = 00:00:32 . Memory (MB): peak = 5968.355 ; gain = 123.469 ; free physical = 313 ; free virtual = 2068 
+// Elapsed time: 32 seconds
+dismissDialog("Open Project"); // bL:g (cv:JFrame)
+// TclEventType: DG_UPDATE_GRAPH
+// TclEventType: DG_ANALYSIS_MSG_RESET
+// TclEventType: DG_UPDATE_GRAPH
+// TclEventType: DG_ANALYSIS_MSG_RESET
+// TclEventType: DG_UPDATE_GRAPH
+// Tcl Message: update_compile_order -fileset sources_1 
+// [GUI Memory]: 64 MB (+1473kb) [00:04:35]
+// Elapsed time: 37 seconds
+selectMenu(PAResourceItoN.MainMenuMgr_FILE, "File"); // V:JideMenu (CommandMenuBar:CommandBar, cv:JFrame)
+selectMenu(PAResourceItoN.MainMenuMgr_OPEN_RECENT_PROJECT, "Open Recent Project"); // ab:JMenu (JPopupMenu:JComponent, Popup:JWindow)
+selectMenu(PAResourceItoN.MainMenuMgr_OPEN_RECENT_FILE, "Open Recent File"); // ab:JMenu (JPopupMenu:JComponent, Popup:JWindow)
+selectMenu(PAResourceItoN.MainMenuMgr_EXPORT, "Export"); // ab:JMenu (JPopupMenu:JComponent, Popup:JWindow)
+selectMenuItem(PAResourceCommand.PACommandNames_LAUNCH_HARDWARE, "Launch SDK"); // af:JMenuItem (JPopupMenu:JComponent, Popup:JWindow)
+dismissMenu(PAResourceItoN.MainMenuMgr_FILE, "File"); // V:JideMenu (CommandMenuBar:CommandBar, cv:JFrame)
+// Run Command: PAResourceCommand.PACommandNames_LAUNCH_HARDWARE
+// ai:x (cv:JFrame): Launch SDK: addNotify
+selectButton(RDIResource.BaseDialog_OK, "OK"); // a:JButton (JPanel:JComponent, ai:x)
+dismissDialog("Launch SDK"); // ai:x (cv:JFrame)
+// Tcl Message: launch_sdk -workspace /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk -hwspec /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk/PS_PL_wrapper.hdf 
+// Tcl Message: INFO: [Vivado 12-393] Launching SDK... INFO: [Vivado 12-417] Running xsdk -workspace /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk -hwspec /home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.sdk/PS_PL_wrapper.hdf INFO: [Vivado 12-3157] SDK launch initiated. Please check console for any further messages. 
+// bL:g (cv:JFrame):  Launch SDK : addNotify
+dismissDialog("Launch SDK"); // bL:g (cv:JFrame)
+// Elapsed time: 60 seconds
+selectMenu(PAResourceItoN.MainMenuMgr_FILE, "File"); // V:JideMenu (CommandMenuBar:CommandBar, cv:JFrame)
+selectMenu(PAResourceItoN.MainMenuMgr_OPEN_RECENT_PROJECT, "Open Recent Project"); // ab:JMenu (JPopupMenu:JComponent, Popup:JWindow)
+selectMenuItem(PAResourceCommand.PACommandNames_CLOSE_PROJECT, "Close Project"); // af:JMenuItem (JPopupMenu:JComponent, Popup:JWindow)
+dismissMenu(PAResourceItoN.MainMenuMgr_FILE, "File"); // V:JideMenu (CommandMenuBar:CommandBar, cv:JFrame)
+// Run Command: PAResourceCommand.PACommandNames_CLOSE_PROJECT
+// G:be (cv:JFrame): Close Project: addNotify
+// [Engine Memory]: 5,063 MB (+682kb) [00:05:48]
+selectButton(RDIResource.BaseDialog_OK, "OK"); // a:JButton (JPanel:JComponent, G:be)
+// bL:g (cv:JFrame):  Close Project : addNotify
+// TclEventType: PROJECT_CLOSE
+dismissDialog("Close Project"); // G:be (cv:JFrame)
+// HMemoryUtils.trashcanNow. Engine heap size: 5,071 MB. GUI used memory: 38 MB. Current time: 12/3/16 3:13:14 PM GMT
+// Tcl Message: close_project 
+// 'b' command handler elapsed time: 4 seconds
+dismissDialog("Close Project"); // bL:g (cv:JFrame)
+selectButton(PAResourceEtoH.GettingStartedView_OPEN_HARDWARE_MANAGER, "Open Hardware Manager"); // l:JideButton (JPanel:JComponent, cv:JFrame)
+// Run Command: PAResourceCommand.PACommandNames_OPEN_HARDWARE_MANAGER
+// Tcl Command: 'rdi::info_commands get_hw_probes'
+// Tcl Command: 'load_features labtools'
+// TclEventType: LOAD_FEATURE
+// TclEventType: FILE_SET_NEW
+// TclEventType: RUN_ADD
+// TclEventType: RUN_CURRENT
+// TclEventType: PROJECT_NEW
+// TclEventType: HW_SESSION_OPEN
+// 'K' command handler elapsed time: 8 seconds
+// Tcl Message: open_hw 
+// Tcl Message: INFO: [IP_Flow 19-234] Refreshing IP repositories INFO: [IP_Flow 19-1704] No user IP repositories specified 
+// Tcl Message: INFO: [IP_Flow 19-2313] Loaded Vivado IP repository '/opt/Xilinx16/Vivado/2016.2/data/ip'. 
+// Tcl Message: open_hw: Time (s): cpu = 00:00:04 ; elapsed = 00:00:06 . Memory (MB): peak = 6001.031 ; gain = 16.008 ; free physical = 145 ; free virtual = 1678 
+// Elapsed time: 19 seconds
+selectButton(PAResourceOtoP.ProgramDebugTab_OPEN_TARGET, "Open target"); // i:l (JPanel:JComponent, cv:JFrame)
+selectMenuItem(PAResourceCommand.PACommandNames_AUTO_CONNECT_TARGET, "Auto Connect"); // af:JMenuItem (am:JPopupMenu, cv:JFrame)
+// Run Command: PAResourceCommand.PACommandNames_AUTO_CONNECT_TARGET
+// Tcl Message: connect_hw_server 
+// bL:g (cv:JFrame):  Auto Connect : addNotify
+// Tcl Message: INFO: [Labtools 27-2285] Connecting to hw_server url TCP:localhost:3121 INFO: [Labtools 27-2222] Launching hw_server... 
+// HMemoryUtils.trashcanNow. Engine heap size: 5,098 MB. GUI used memory: 35 MB. Current time: 12/3/16 3:13:39 PM GMT
+// TclEventType: HW_SERVER_UPDATE
+// Tcl Message: INFO: [Labtools 27-2221] Launch Output:  ****** Xilinx hw_server v2016.2   **** Build date : Jun  2 2016-16:54:00     ** Copyright 1986-2016 Xilinx, Inc. All Rights Reserved.   
+// TclEventType: HW_TARGET_CHANGE
+// TclEventType: HW_TARGET_CLOSE
+// Tcl Message: open_hw_target 
+// Tcl Message: INFO: [Labtoolstcl 44-466] Opening hw_target localhost:3121/xilinx_tcf/Digilent/210249A0CF17 
+// TclEventType: HW_DEVICE_CHANGE
+// TclEventType: HW_SYSMON_ADD
+// TclEventType: HW_TARGET_UPDATE
+// Tcl Message: open_hw_target: Time (s): cpu = 00:00:01 ; elapsed = 00:00:11 . Memory (MB): peak = 6011.191 ; gain = 0.031 ; free physical = 136 ; free virtual = 1646 
+// Tcl Message: current_hw_device [lindex [get_hw_devices] 1] 
+// TclEventType: HW_DEVICE_CHANGE
+// TclEventType: HW_SYSMON_CHANGE
+// TclEventType: HW_DEVICE_UPDATE
+// TclEventType: HW_DEVICE_CHANGE
+// Tcl Message: refresh_hw_device -update_hw_probes false [lindex [get_hw_devices] 1] 
+// Tcl Message: INFO: [Labtools 27-1434] Device xc7z010 (JTAG device index = 1) is programmed with a design that has no supported debug core(s) in it. 
+// Elapsed time: 15 seconds
+dismissDialog("Auto Connect"); // bL:g (cv:JFrame)
+selectButton(PAResourceOtoP.ProgramDebugTab_REFRESH_DEVICE, "Refresh device"); // i:l (JPanel:JComponent, cv:JFrame)
+selectMenuItem((HResource) null, "xc7z010_1"); // af:JMenuItem (am:JPopupMenu, cv:JFrame)
+// PAPropertyPanels.initPanels (xc7z010_1) elapsed time: 0.8s
+// Run Command: PAResourceCommand.PACommandNames_REFRESH_DEVICE
+// TclEventType: HW_DEVICE_CHANGE
+// TclEventType: HW_SYSMON_CHANGE
+// TclEventType: HW_DEVICE_UPDATE
+// TclEventType: HW_DEVICE_CHANGE
+// bL:g (cv:JFrame):  Refresh Device : addNotify
+// Tcl Message: refresh_hw_device [lindex [get_hw_devices] 1] 
+// Tcl Message: INFO: [Labtools 27-1434] Device xc7z010 (JTAG device index = 1) is programmed with a design that has no supported debug core(s) in it. 
+dismissDialog("Refresh Device"); // bL:g (cv:JFrame)
+selectButton(PAResourceOtoP.ProgramDebugTab_PROGRAM_DEVICE, "Program device"); // i:l (JPanel:JComponent, cv:JFrame)
+selectMenuItem((HResource) null, "xc7z010_1"); // af:JMenuItem (am:JPopupMenu, cv:JFrame)
+// Run Command: PAResourceCommand.PACommandNames_PROGRAM_FPGA
+// aW:ak (cv:JFrame): Program Device: addNotify
+selectButton(PAResourceOtoP.ProgramFpgaDialog_SPECIFY_BITSTREAM_FILE, (String) null); // r:a (ap:JPanel, aW:ak)
+// HMemoryUtils.trashcanNow. Engine heap size: 5,118 MB. GUI used memory: 29 MB. Current time: 12/3/16 3:14:25 PM GMT
+// Elapsed time: 38 seconds
+setFileChooser("/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.runs/impl_1/PS_PL_wrapper.bit");
+selectButton(PAResourceOtoP.ProgramFpgaDialog_PROGRAM, "Program"); // a:JButton (JPanel:JComponent, aW:ak)
+// bL:g (cv:JFrame):  Program Device : addNotify
+dismissDialog("Program Device"); // aW:ak (cv:JFrame)
+// TclEventType: HW_DEVICE_CHANGE
+// Tcl Message: set_property PROBES.FILE {/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.runs/impl_1/debug_nets.ltx} [lindex [get_hw_devices] 1] 
+// TclEventType: HW_DEVICE_CHANGE
+// Tcl Message: set_property PROGRAM.FILE {/home/graham/Dropbox/N3workingG/TE0722Rebuild/N3Vivado/TE0722TD/N3Z_TD_FIFO/N3Z_TD_FIFO.runs/impl_1/PS_PL_wrapper.bit} [lindex [get_hw_devices] 1] 
+// Tcl Message: program_hw_devices [lindex [get_hw_devices] 1] 
+// TclEventType: HW_DEVICE_CHANGE
+// Tcl Message: INFO: [Labtools 27-3164] End of startup status: HIGH 
+// TclEventType: HW_DEVICE_CHANGE
+// TclEventType: HW_SYSMON_CHANGE
+// Tcl Message: refresh_hw_device [lindex [get_hw_devices] 1] 
+// TclEventType: HW_ILA_CHANGE
+// TclEventType: HW_DEVICE_UPDATE
+// TclEventType: HW_DEVICE_CHANGE
+// Tcl Message: INFO: [Labtools 27-2302] Device xc7z010 (JTAG device index = 1) is programmed with a design that has 1 ILA core(s). 
+// HMemoryUtils.trashcanNow. Engine heap size: 5,139 MB. GUI used memory: 35 MB. Current time: 12/3/16 3:15:01 PM GMT
+// TclEventType: HW_DEVICE_CHANGE
+// TclEventType: HW_DEVICE_PROBES_CHANGE
+// TclEventType: DEBUG_PROBE_SET_CHANGE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: HW_DEVICE_PROBES_CHANGE
+// TclEventType: HW_ILA_CHANGE
+// Tcl Message: refresh_hw_device: Time (s): cpu = 00:00:09 ; elapsed = 00:00:15 . Memory (MB): peak = 6052.996 ; gain = 19.016 ; free physical = 135 ; free virtual = 1515 
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: WAVEFORM_OPEN_WCFG
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// Waveform: addNotify
+// Tcl Message: display_hw_ila_data [ get_hw_ila_data hw_ila_data_1 -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]] 
+// TclEventType: DEBUG_PROBE_CHANGE
+// Waveform: addNotify
+// TclEventType: DEBUG_PROBE_CHANGE
+// Waveform: addNotify
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// TclEventType: DEBUG_PROBE_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_TITLE
+// Tcl Message: display_hw_ila_data: Time (s): cpu = 00:00:03 ; elapsed = 00:00:10 . Memory (MB): peak = 6059.824 ; gain = 6.828 ; free physical = 99 ; free virtual = 1495 
+// 'A' command handler elapsed time: 70 seconds
+// Elapsed time: 28 seconds
+dismissDialog("Program Device"); // bL:g (cv:JFrame)
+maximizeFrame(RDIResource.WorkspaceDockingHolder_DOCKABLE_FRAME, "Settings - hw_ila_1"); // af:ao (FrameContainer:JideTabbedPane, cv:JFrame)
+selectComboBox("Capture mode:", "BASIC", 1); // f:JComboBox (JPanel:JComponent, cv:JFrame)
+// TclEventType: HW_ILA_CHANGE
+// Tcl Message: set_property CONTROL.CAPTURE_MODE BASIC [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}] 
+// Waveform: addNotify
+unMaximizeFrame(RDIResource.WorkspaceDockingHolder_DOCKABLE_FRAME, "Settings - hw_ila_1"); // af:ao (FrameContainer:JideTabbedPane, cv:JFrame)
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,146 MB. GUI used memory: 36 MB. Current time: 12/3/16 3:15:28 PM GMT
+selectButton(PAResourceItoN.IlaProbeTablePanel_ADD_PROBE, "IlaProbeTablePanel_new"); // y:JideButton (CommandBar:DockableBar, cv:JFrame)
+// Add Probes: show
+// PAPropertyPanels.initPanels (PS_PL_i/axi_fifo_mm_s_1_axi_str_txd_tvalid) elapsed time: 0.2s
+selectTree(PAResourceOtoP.ProbesView_PROBES_TREE, "[root, PS_PL_i/axi_fifo_mm_s_1_axi_str_txd_tvalid]", 1, false); // D:k (JViewport:JComponent, ResizableWindow:JWindow)
+// Elapsed time: 16 seconds
+selectTree(PAResourceOtoP.ProbesView_PROBES_TREE, "[root, PS_PL_i/n3z_tonetest_0_stream_tvalid]", 8, false); // D:k (JViewport:JComponent, ResizableWindow:JWindow)
+// Elapsed time: 41 seconds
+selectTree(PAResourceOtoP.ProbesView_PROBES_TREE, "[root, PS_PL_i/n3z_tonetest_0_stream_tlast]", 7, false); // D:k (JViewport:JComponent, ResizableWindow:JWindow)
+// Elapsed time: 10 seconds
+selectButton(PAResourceAtoD.AddIlaProbesPopup_OK, "OK"); // a:JButton (JPanel:JComponent, ResizableWindow:JWindow)
+// Add Probes: hide
+setText("[0 - 1023]", "500"); // J:F (JPanel:JComponent, cv:JFrame)
+// TclEventType: HW_ILA_CHANGE
+selectTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "ui.data.chipscope.v@48c3ffe9 ; eq1'bX ; probe10[0] ; ", 0, "ui.data.chipscope.v@48c3ffe9", 0); // n:v (JViewport:JComponent, cv:JFrame)
+// Tcl Message: set_property CONTROL.TRIGGER_POSITION 500 [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}] 
+// [GUI Memory]: 70 MB (+3457kb) [00:09:30]
+selectTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "ui.data.chipscope.v@48c3ffe9 ; eq1'bX ; probe10[0] ; ", 0, "eq1'bX", 1); // n:v (JViewport:JComponent, cv:JFrame)
+selectComboBox(PAResourceAtoD.CompareValuePanel_SCALAR_VALUES, "1 (logical one)", 1); // f:JComboBox (JPanel:JComponent, ResizableWindow:JWindow)
+editTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "eq1'bX", 0, "Compare Value", 1); // n:v (JViewport:JComponent, cv:JFrame)
+// TclEventType: DEBUG_PROBE_CHANGE
+// Tcl Message: set_property TRIGGER_COMPARE_VALUE eq1'b1 [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tlast -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]] 
+// Elapsed time: 35 seconds
+selectButton(PAResourceTtoZ.TriggerStatusPanel_RUN_TRIGGER_FOR_THIS_ILA_CORE, "ILA_run_trigger"); // y:JideButton (CommandBar:DockableBar, cv:JFrame)
+// PAPropertyPanels.initPanels (hw_ila_1) elapsed time: 0.3s
+// Run Command: PAResourceCommand.PACommandNames_RUN_TRIGGER
+// TclEventType: HW_ILA_CHANGE
+// Tcl Message: run_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}] 
+// Tcl Message: INFO: [Labtools 27-1964] The ILA core 'hw_ila_1' trigger was armed at 2016-Dec-03 15:17:36 
+// TclEventType: HW_ILA_CHANGE
+// Tcl Message: wait_on_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}] 
+// TclEventType: HW_ILA_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// Tcl Message: display_hw_ila_data [upload_hw_ila_data [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]] 
+// Tcl Message: INFO: [Labtools 27-1966] The ILA core 'hw_ila_1' triggered at 2016-Dec-03 15:17:44 
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,163 MB. GUI used memory: 38 MB. Current time: 12/3/16 3:17:46 PM GMT
+// Waveform: addNotify
+// Elapsed time: 214 seconds
+maximizeFrame(RDIResource.WorkspaceDockingHolder_DOCKABLE_FRAME, "Waveform - hw_ila_1"); // af:ao (FrameContainer:JideTabbedPane, cv:JFrame)
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,163 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:21:12 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+maximizeView(PAResourceOtoP.PAViews_BASE_WORKSPACE, "BaseWorkspace"); // V:a (Workspace:JPanel, cv:JFrame)
+// Elapsed time: 55 seconds
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 133, 61); // n:a (JViewport:JComponent, cv:JFrame)
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 57 MB. Current time: 12/3/16 3:22:08 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:09 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 43 MB. Current time: 12/3/16 3:22:10 PM GMT
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 379, -46); // n:a (JViewport:JComponent, cv:JFrame)
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:12 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 376, -51); // n:a (JViewport:JComponent, cv:JFrame)
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:18 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:18 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 41 MB. Current time: 12/3/16 3:22:20 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:23 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:23 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:24 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:24 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:24 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 41 MB. Current time: 12/3/16 3:22:24 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:25 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:25 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:25 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 41 MB. Current time: 12/3/16 3:22:26 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:26 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:26 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:27 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:27 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:27 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:28 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:28 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:29 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:30 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:30 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:31 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:31 PM GMT
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:33 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:33 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:33 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 40 MB. Current time: 12/3/16 3:22:34 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 41 MB. Current time: 12/3/16 3:22:36 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:40 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,165 MB. GUI used memory: 39 MB. Current time: 12/3/16 3:22:42 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// [GUI Memory]: 74 MB (+349kb) [00:26:49]
+// [GUI Memory]: 79 MB (+982kb) [00:28:24]
+// [GUI Memory]: 83 MB (+629kb) [00:29:59]
+// [GUI Memory]: 88 MB (+487kb) [00:31:34]
+// [GUI Memory]: 92 MB (+103kb) [00:33:09]
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 41 MB. Current time: 12/3/16 3:52:44 PM GMT
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 38 MB. Current time: 12/3/16 4:22:45 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 81 MB. Current time: 12/3/16 4:24:29 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 40 MB. Current time: 12/3/16 4:24:30 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// Elapsed time: 3734 seconds
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 350, 511, false, false, false, true, false); // n:a (JViewport:JComponent, cv:JFrame) - Popup Trigger
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+selectMenuItem((HResource) null, "Full View"); // af:JMenuItem (am:JPopupMenu, cv:JFrame)
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 37 MB. Current time: 12/3/16 4:24:35 PM GMT
+// Elapsed time: 29 seconds
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 347, 509, false, false, false, true, false); // n:a (JViewport:JComponent, cv:JFrame) - Popup TriggerWaveform: addNotify
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+unmaximizeView(PAResourceOtoP.PAViews_BASE_WORKSPACE, "BaseWorkspace"); // V:a (Workspace:JPanel, cv:JFrame)
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 54 MB. Current time: 12/3/16 4:25:08 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+maximizeView(PAResourceOtoP.PAViews_BASE_WORKSPACE, "BaseWorkspace"); // V:a (Workspace:JPanel, cv:JFrame)
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 348, 509, false, false, false, true, false); // n:a (JViewport:JComponent, cv:JFrame) - Popup TriggerWaveform: addNotify
+unmaximizeView(PAResourceOtoP.PAViews_BASE_WORKSPACE, "BaseWorkspace"); // V:a (Workspace:JPanel, cv:JFrame)
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 38 MB. Current time: 12/3/16 4:25:11 PM GMT
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 344, 555, false, false, false, true, false); // n:a (JViewport:JComponent, cv:JFrame) - Popup TriggerWaveform: addNotify
+unMaximizeFrame(RDIResource.WorkspaceDockingHolder_DOCKABLE_FRAME, "Waveform - hw_ila_1"); // af:ao (FrameContainer:JideTabbedPane, cv:JFrame)
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+selectButton(PAResourceItoN.IlaProbeTablePanel_ADD_PROBE, "IlaProbeTablePanel_new"); // y:JideButton (CommandBar:DockableBar, cv:JFrame)
+// Add Probes: show
+selectTree(PAResourceOtoP.ProbesView_PROBES_TREE, "[root, PS_PL_i/n3z_tonetest_0_stream_tvalid]", 8, false); // D:k (JViewport:JComponent, ResizableWindow:JWindow)
+// Elapsed time: 18 seconds
+selectButton(PAResourceAtoD.AddIlaProbesPopup_OK, "OK"); // a:JButton (JPanel:JComponent, ResizableWindow:JWindow)
+// Add Probes: hide
+selectTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "ui.data.chipscope.v@48c3ffe9 ; eq1'b1 ; probe10[0] ; 1 of 1", 0, "ui.data.chipscope.v@48c3ffe9", 0); // n:v (JViewport:JComponent, cv:JFrame)
+selectButton(PAResourceItoN.IlaProbeTablePanel_REMOVE_SELECTED_PROBE, "IlaProbeTablePanel_remove"); // y:JideButton (CommandBar:DockableBar, cv:JFrame)
+// TclEventType: DEBUG_PROBE_CHANGE
+// Tcl Message: set_property TRIGGER_COMPARE_VALUE eq1'bX [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tlast -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]] 
+selectTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "ui.data.chipscope.v@6c31f0fe ; eq1'bX ; probe11[0] ; ", 0, "ui.data.chipscope.v@6c31f0fe", 0); // n:v (JViewport:JComponent, cv:JFrame)
+selectTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "ui.data.chipscope.v@6c31f0fe ; eq1'bX ; probe11[0] ; ", 0, "eq1'bX", 1); // n:v (JViewport:JComponent, cv:JFrame)
+selectComboBox(PAResourceAtoD.CompareValuePanel_SCALAR_VALUES, "1 (logical one)", 1); // f:JComboBox (JPanel:JComponent, ResizableWindow:JWindow)
+editTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "eq1'bX", 0, "Compare Value", 1); // n:v (JViewport:JComponent, cv:JFrame)
+// TclEventType: DEBUG_PROBE_CHANGE
+// Tcl Message: set_property TRIGGER_COMPARE_VALUE eq1'b1 [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tvalid -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]] 
+// Elapsed time: 45 seconds
+selectButton(PAResourceTtoZ.TriggerStatusPanel_RUN_TRIGGER_FOR_THIS_ILA_CORE, "ILA_run_trigger"); // y:JideButton (CommandBar:DockableBar, cv:JFrame)
+// Run Command: PAResourceCommand.PACommandNames_RUN_TRIGGER
+// TclEventType: HW_ILA_CHANGE
+// Tcl Message: run_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}] 
+// Tcl Message: INFO: [Labtools 27-1964] The ILA core 'hw_ila_1' trigger was armed at 2016-Dec-03 16:26:45 
+// TclEventType: HW_ILA_CHANGE
+// Tcl Message: wait_on_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}] 
+// TclEventType: HW_ILA_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 75 MB. Current time: 12/3/16 4:26:55 PM GMT
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// Tcl Message: display_hw_ila_data [upload_hw_ila_data [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]] 
+// Tcl Message: INFO: [Labtools 27-1966] The ILA core 'hw_ila_1' triggered at 2016-Dec-03 16:26:54 
+// Elapsed time: 43 seconds
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 426, 959, false, false, false, true, false); // n:a (JViewport:JComponent, cv:JFrame) - Popup TriggerWaveform: addNotify
+maximizeFrame(RDIResource.WorkspaceDockingHolder_DOCKABLE_FRAME, "Waveform - hw_ila_1"); // af:ao (FrameContainer:JideTabbedPane, cv:JFrame)
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 38 MB. Current time: 12/3/16 4:27:28 PM GMT
+// Elapsed time: 13 seconds
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 344, 555, false, false, false, true, false); // n:a (JViewport:JComponent, cv:JFrame) - Popup TriggerWaveform: addNotify
+unMaximizeFrame(RDIResource.WorkspaceDockingHolder_DOCKABLE_FRAME, "Waveform - hw_ila_1"); // af:ao (FrameContainer:JideTabbedPane, cv:JFrame)
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 426, 959, false, false, false, true, false); // n:a (JViewport:JComponent, cv:JFrame) - Popup TriggerWaveform: addNotify
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 37 MB. Current time: 12/3/16 4:27:43 PM GMT
+maximizeFrame(RDIResource.WorkspaceDockingHolder_DOCKABLE_FRAME, "Waveform - hw_ila_1"); // af:ao (FrameContainer:JideTabbedPane, cv:JFrame)
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+maximizeView(PAResourceOtoP.PAViews_BASE_WORKSPACE, "BaseWorkspace"); // V:a (Workspace:JPanel, cv:JFrame)
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 39 MB. Current time: 12/3/16 4:27:50 PM GMT
+// Elapsed time: 187 seconds
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 348, 509, false, false, false, true, false); // n:a (JViewport:JComponent, cv:JFrame) - Popup TriggerWaveform: addNotify
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+unmaximizeView(PAResourceOtoP.PAViews_BASE_WORKSPACE, "BaseWorkspace"); // V:a (Workspace:JPanel, cv:JFrame)
+selectButton(PAResourceEtoH.HardwareIlaWaveformView_RUN_TRIGGER_FOR_THIS_ILA_CORE, "Waveform Viewer_run_trigger"); // y:JideButton (CommandBar:DockableBar, cv:JFrame)
+// Run Command: PAResourceCommand.PACommandNames_RUN_TRIGGER
+// TclEventType: HW_ILA_CHANGE
+// Tcl Message: run_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}] 
+// Tcl Message: INFO: [Labtools 27-1964] The ILA core 'hw_ila_1' trigger was armed at 2016-Dec-03 16:31:00 
+// TclEventType: HW_ILA_CHANGE
+// Tcl Message: wait_on_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}] 
+// TclEventType: HW_ILA_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_MODEL_EVENT
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 38 MB. Current time: 12/3/16 4:31:11 PM GMT
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// Tcl Message: display_hw_ila_data [upload_hw_ila_data [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]] 
+// Tcl Message: INFO: [Labtools 27-1966] The ILA core 'hw_ila_1' triggered at 2016-Dec-03 16:31:11 
+// Elapsed time: 744 seconds
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 344, 554, false, false, false, true, false); // n:a (JViewport:JComponent, cv:JFrame) - Popup TriggerWaveform: addNotify
+unMaximizeFrame(RDIResource.WorkspaceDockingHolder_DOCKABLE_FRAME, "Waveform - hw_ila_1"); // af:ao (FrameContainer:JideTabbedPane, cv:JFrame)
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 87 MB. Current time: 12/3/16 4:43:24 PM GMT
+selectButton(PAResourceItoN.IlaProbeTablePanel_ADD_PROBE, "IlaProbeTablePanel_new"); // y:JideButton (CommandBar:DockableBar, cv:JFrame)
+// Add Probes: show
+selectTree(PAResourceOtoP.ProbesView_PROBES_TREE, "[root, PS_PL_i/n3z_tonetest_0_stream_tlast]", 7, false); // D:k (JViewport:JComponent, ResizableWindow:JWindow)
+// Add Probes: hide
+selectTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "ui.data.chipscope.v@6c31f0fe ; eq1'b1 ; probe11[0] ; 1 of 1", 0, "ui.data.chipscope.v@6c31f0fe", 0); // n:v (JViewport:JComponent, cv:JFrame)
+selectButton(PAResourceItoN.IlaProbeTablePanel_REMOVE_SELECTED_PROBE, "IlaProbeTablePanel_remove"); // y:JideButton (CommandBar:DockableBar, cv:JFrame)
+// TclEventType: DEBUG_PROBE_CHANGE
+// Tcl Message: set_property TRIGGER_COMPARE_VALUE eq1'bX [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tvalid -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]] 
+selectTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "ui.data.chipscope.v@427191a3 ; eq1'bX ; probe10[0] ; ", 0, "ui.data.chipscope.v@427191a3", 0); // n:v (JViewport:JComponent, cv:JFrame)
+selectTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "ui.data.chipscope.v@427191a3 ; eq1'bX ; probe10[0] ; ", 0, "ui.data.chipscope.v@427191a3", 0, false, false, false, false, true); // n:v (JViewport:JComponent, cv:JFrame) - Double Click
+selectTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "ui.data.chipscope.v@427191a3 ; eq1'bX ; probe10[0] ; ", 0, "eq1'bX", 1); // n:v (JViewport:JComponent, cv:JFrame)
+selectComboBox(PAResourceAtoD.CompareValuePanel_SCALAR_VALUES, "1 (logical one)", 1); // f:JComboBox (JPanel:JComponent, ResizableWindow:JWindow)
+editTable(PAResourceTtoZ.TriggerSetupPanel_TABLE, "eq1'bX", 0, "Compare Value", 1); // n:v (JViewport:JComponent, cv:JFrame)
+// TclEventType: DEBUG_PROBE_CHANGE
+// Tcl Message: set_property TRIGGER_COMPARE_VALUE eq1'b1 [get_hw_probes PS_PL_i/n3z_tonetest_0_stream_tlast -of_objects [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]] 
+// Elapsed time: 47 seconds
+selectButton(PAResourceTtoZ.TriggerStatusPanel_RUN_TRIGGER_FOR_THIS_ILA_CORE, "ILA_run_trigger"); // y:JideButton (CommandBar:DockableBar, cv:JFrame)
+// Run Command: PAResourceCommand.PACommandNames_RUN_TRIGGER
+// TclEventType: HW_ILA_CHANGE
+// Tcl Message: run_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}] 
+// Tcl Message: INFO: [Labtools 27-1964] The ILA core 'hw_ila_1' trigger was armed at 2016-Dec-03 16:44:29 
+// TclEventType: HW_ILA_CHANGE
+// Tcl Message: wait_on_hw_ila [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}] 
+// TclEventType: HW_ILA_CHANGE
+// TclEventType: WAVEFORM_MODEL_EVENT
+// Tcl Message: display_hw_ila_data [upload_hw_ila_data [get_hw_ilas -of_objects [get_hw_devices xc7z010_1] -filter {CELL_NAME=~"u_ila_0"}]] 
+// Tcl Message: INFO: [Labtools 27-1966] The ILA core 'hw_ila_1' triggered at 2016-Dec-03 16:44:36 
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_MODEL_EVENT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// TclEventType: WAVEFORM_UPDATE_COMMANDS
+// Elapsed time: 13 seconds
+selectGraphicalView(RDIResource.RDIViews_WAVEFORM_VIEWER, 426, 959, false, false, false, true, false); // n:a (JViewport:JComponent, cv:JFrame) - Popup TriggerWaveform: addNotify
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 38 MB. Current time: 12/3/16 4:44:42 PM GMT
+maximizeFrame(RDIResource.WorkspaceDockingHolder_DOCKABLE_FRAME, "Waveform - hw_ila_1"); // af:ao (FrameContainer:JideTabbedPane, cv:JFrame)
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+maximizeView(PAResourceOtoP.PAViews_BASE_WORKSPACE, "BaseWorkspace"); // V:a (Workspace:JPanel, cv:JFrame)
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 47 MB. Current time: 12/3/16 4:44:45 PM GMT
+// TclEventType: WAVEFORM_UPDATE_WAVEFORM
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 39 MB. Current time: 12/3/16 5:14:45 PM GMT
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 39 MB. Current time: 12/3/16 5:44:46 PM GMT
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 38 MB. Current time: 12/3/16 6:14:45 PM GMT
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 38 MB. Current time: 12/3/16 6:44:45 PM GMT
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 39 MB. Current time: 12/3/16 7:14:46 PM GMT
+// HMemoryUtils.trashcanNow. Engine heap size: 5,170 MB. GUI used memory: 39 MB. Current time: 12/3/16 8:16:39 PM GMT

@@ -1,0 +1,23 @@
+--------------------------------- Version Log ----------------------------------
+Version                                 Path
+System Generator 2016.2                 C:/Xilinx/Vivado/2016.2
+Matlab 8.4.0.150421 (R2014b)            C:\Program Files\MATLAB\R2014b
+Vivado 2016.2                           C:/Xilinx/Vivado/2016.2
+--------------------------------------------------------------------------------
+Summary of Errors:
+Error 0001: Illegal parameterization: location constraints
+     Block: 'DACtest/PWMAudio1'
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'DACtest/PWMAudio1'
+
+Details:
+The number of pad locations must match the number of bits of the
+signal driving this Gateway Out. The format must be specified as
+a cell array, e.g., {'MSB', ..., 'LSB'}
+Error occurred during "Rate and Type Error Checking".
+
+--------------------------------------------------------------------------------

@@ -1,0 +1,23 @@
+--------------------------------- Version Log ----------------------------------
+Version                                 Path
+System Generator 2014.4                 C:/Xilinx/Vivado/2014.4
+Matlab 8.3.0.532 (R2014a)               C:\Program Files\MATLAB\R2014a
+Vivado 2014.4                           C:/Xilinx/Vivado/2014.4
+--------------------------------------------------------------------------------
+Summary of Errors:
+Error 0001: Illegal type on port: en
+     Block: 'LevelTest/LevelMonitor1/Register3'
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'LevelTest/LevelMonitor1/Register3'
+
+Details:
+The en port has data type UFix_1_0.
+The en port must be a boolean signal.
+
+Error occurred during "Rate and Type Error Checking".
+
+--------------------------------------------------------------------------------

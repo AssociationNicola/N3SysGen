@@ -1,0 +1,19 @@
+--------------------------------- Version Log ----------------------------------
+Version                                 Path
+System Generator 2016.2                 /opt/Xilinx/Vivado/2016.2
+Matlab 8.4.0.150421 (R2014b)            /usr/local/MATLAB/R2014b
+Vivado 2016.2                           /opt/Xilinx/Vivado/2016.2
+--------------------------------------------------------------------------------
+Summary of Errors:
+Error 0001: Undriven input port
+     Block: 'Filtertest/SCK'
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'Filtertest/SCK'
+
+Details:
+The input ports on this block must be driven by other Xilinx blocks
+--------------------------------------------------------------------------------

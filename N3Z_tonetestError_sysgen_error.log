@@ -1,0 +1,108 @@
+--------------------------------- Version Log ----------------------------------
+Version                                 Path
+System Generator 2016.2                 /opt/Xilinx/Vivado/2016.2
+Matlab 8.4.0.150421 (R2014b)            /usr/local/MATLAB/R2014b
+Vivado 2016.2                           /opt/Xilinx/Vivado/2016.2
+--------------------------------------------------------------------------------
+Summary of Errors:
+Error 0001: Rates and types converged for the feedback path through t...
+    Blocks: 'N3Z_tonetestError/User_Interface/PicoBlaze1', et al.
+Error 0002: Internal Block Error: Set illegal rate
+     Block: 'N3Z_tonetestError/DSProcessor1/Convert3'
+Error 0003: Internal Block Error: Set illegal rate
+     Block: 'N3Z_tonetestError/DSProcessor1/Convert3'
+Error 0004: Undriven input port
+     Block: 'N3Z_tonetestError/DSProcessor1/PicoBlaze6'
+Error 0005: Undriven input port
+     Block: 'N3Z_tonetestError/KeyPadinterface/PicoBlaze6'
+Error 0006: Undriven input port
+     Block: 'N3Z_tonetestError/ToneDetect/PicoBlaze6'
+Error 0007: Undriven input port
+     Block: 'N3Z_tonetestError/User_Interface/PicoBlaze1'
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'N3Z_tonetestError/User_Interface/PicoBlaze1'
+  'N3Z_tonetestError/DSProcessor1/PicoBlaze6'
+  'N3Z_tonetestError/KeyPadinterface/PicoBlaze6'
+  'N3Z_tonetestError/ToneDetect/PicoBlaze6'
+  'N3Z_tonetestError/ToneDetect/Slice2'
+  'N3Z_tonetestError/ToneDetect/Convert3'
+  'N3Z_tonetestError/KeyPadinterface/Slice2'
+  'N3Z_tonetestError/KeyPadinterface/Convert3'
+  'N3Z_tonetestError/KeyPadinterface/Convert5'
+  'N3Z_tonetestError/DSProcessor1/Convert3'
+  'N3Z_tonetestError/User_Interface/Convert1'
+
+Details:
+Rates and types converged for the feedback path through these
+blocks. However, the solution contains unknowns.  Could not
+establish rates for the blocks listed at the end of this message.
+
+You may need to add an "Assert" block to instruct the system how
+to resolve rates and types.
+
+In the debugging of this problem, you may find it helpful to have
+the sample rates displayed on the Simulink diagram. This will
+happen if you open the System Generator block's dialog box, set
+its "Block Icon Display" control to "Sample Rates", and then
+update the diagram.
+
+
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'N3Z_tonetestError/DSProcessor1/Convert3'
+
+Details:
+Internal Block Error: This block has an unknown rate on its "dout" port
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'N3Z_tonetestError/DSProcessor1/Convert3'
+
+Details:
+Internal Block Error: This block has an unknown rate on its "din" port
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'N3Z_tonetestError/DSProcessor1/PicoBlaze6'
+
+Details:
+The input ports on this block must be driven by other Xilinx blocks
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'N3Z_tonetestError/KeyPadinterface/PicoBlaze6'
+
+Details:
+The input ports on this block must be driven by other Xilinx blocks
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'N3Z_tonetestError/ToneDetect/PicoBlaze6'
+
+Details:
+The input ports on this block must be driven by other Xilinx blocks
+--------------------------------------------------------------------------------
+
+Error 0001:
+
+Reported by:
+  'N3Z_tonetestError/User_Interface/PicoBlaze1'
+
+Details:
+The input ports on this block must be driven by other Xilinx blocks
+--------------------------------------------------------------------------------
