@@ -167,7 +167,7 @@ AwaitRise:          INPUT     s0, Strobe
 		COMPARE s0,00
 		JUMP	Z,isReceiving	;TX_High not set
 		LOAD	Mode,04		;keep in TX mode
-        JUMP      Z, AwaitRise        ; keep looping
+        JUMP      AwaitAudioVal        ; keep looping (was mistakenly on AwaitRise April 18)
 		
 
 isReceiving: 		

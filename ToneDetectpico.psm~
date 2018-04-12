@@ -59,8 +59,8 @@ CONSTANT	TBD2,			7'd				  ;TBdefined
 
 CONSTANT	CmdToUser,		0'd
 CONSTANT	LOMSB,			1'd
-CONSTANT	BRAMaddrMSB,		2'd		;Not currently used (Feb '17)
-CONSTANT	BRAMaddrLSB,		3'd
+CONSTANT	ToneMode,		2'd		
+CONSTANT	BRAMaddrLSB,		3'd	;Not currently used (Feb '17)
 ;also used:8,9,13,14,18,19,23,24 -  8 STRTA,13  STRTB ,18 STPA or 23  STPB, and 9 STRTA,14  STRTB ,19 STPA or 24  STPB
 ; 6,11,16,21 used for running Itone values and 7,12,17,22 for Qtone values
 CONSTANT	StartAmpOut,	25'd		;goes to DSP pico to calibrate AGC
@@ -138,7 +138,7 @@ cold_start:         LOAD      s0, 255'd             ; phase for 45 degrees- actu
 
 ; Routine to look at lowest bit of Strobe to detect rising edge.
 AwaitAudioVal:	 
-
+				OUTPUT Mode,ToneMode	;Make mode value available outside			
 
  
 ;					INPUT     s0, Strobe
@@ -167,15 +167,14 @@ AwaitRise:          INPUT     s0, Strobe
 		COMPARE s0,00
 		JUMP	Z,isReceiving	;TX_High not set
 		LOAD	Mode,04		;keep in TX mode
-        JUMP      Z, AwaitRise        ; keep looping
+        JUMP      Z, AwaitAudioVal        ; keep looping (was mistakenly on AwaitRise April 18)
 		
 
 isReceiving: 		
  		ADD  SampleTimer,01		;Always increment timer in receive mode
 		COMPARE Mode,04
 		JUMP  NZ,StartDemod		;has not just come out of TX
-;		CALL	N3ZtoneLost	;Make sure tone detect is off
-
+;Only do this bit once when going from Transmit mode (Mode 4) to Receive.
 		CALL delay_100ms		;has just come out of TX so wait a bit before detecting tones GN ?????? is this needed???????
 		CALL	N3ZtoneLost	;Make sure tone detect is off
 
